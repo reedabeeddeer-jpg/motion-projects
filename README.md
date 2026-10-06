@@ -42,3 +42,15 @@ npm run ai:audio
 npm run ai:render   # output/ai-tool.mp4
 npm run ai:preview  # صور ثابتة في output/stills/ai-tool
 ```
+
+## إعلان 10 ثوانٍ (`src/ad.html`)
+
+خلفية بألوان متدرجة متحركة، وشعار يدخل من اليمين إلى اليسار مع صوت «ووش» ينتقل من السماعة اليمنى إلى الوسط، ثم اسم العلامة والشعار النصي وزر «اطلب الآن».
+
+```bash
+npm run ad:audio     # output/ad_soundtrack.wav
+npm run ad:render    # output/ad.mp4
+npm run ad:preview   # صور ثابتة في output/stills/ad
+```
+
+لاستخدام شعارك: ضع صورة PNG شفافة في `assets/logo.png`. النصوص قابلة للتعديل من `TEXT` في أعلى `src/ad.html`.
