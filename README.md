@@ -14,3 +14,16 @@ npm run preview    # صور ثابتة في output/stills
 ```
 
 Font: Cairo (SIL OFL), في `assets/fonts`.
+
+## remotion-logo
+
+مشروع Remotion: ظهور لوغو بحركة ناعمة مع نص عربي تحته، 10 ثوانٍ بدقة 1080p على خلفية متدرجة داكنة.
+
+```bash
+cd remotion-logo
+npm install
+npm run studio   # معاينة وتعديل
+npm run render   # out/logo-reveal.mp4
+```
+
+النصوص قابلة للتعديل من `defaultProps` في `src/Root.tsx`. لاستخدام Chromium مثبت مسبقاً بدل التنزيل: اضبط `REMOTION_BROWSER` على مسار المتصفح.
