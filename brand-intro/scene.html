@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Haraka Brand Intro</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+  html, body { margin: 0; background: #07060f; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// ---------------------------------------------------------------------------
+// Deterministic motion-graphics timeline. render(t) draws the frame at t seconds.
+// Open this file in a browser to preview in real time; render.js captures frames.
+// ---------------------------------------------------------------------------
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 20;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+const C = {
+  bg0: '#07060f', bg1: '#140f2e',
+  violet: '#7c5cff', pink: '#ff3d81', cyan: '#22d3ee', amber: '#ffb547',
+  white: '#ffffff', dim: 'rgba(255,255,255,0.55)',
+};
+
+// ---- easing & helpers -----------------------------------------------------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const easeOutCubic = k => 1 - Math.pow(1 - k, 3);
+const easeInCubic = k => k * k * k;
+const easeInOutCubic = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const easeInExpo = k => k === 0 ? 0 : Math.pow(2, 10 * k - 10);
+const easeOutBack = (k, s = 1.70158) => 1 + (s + 1) * Math.pow(k - 1, 3) + s * Math.pow(k - 1, 2);
+const easeOutElastic = k => k === 0 ? 0 : k === 1 ? 1 :
+  Math.pow(2, -10 * k) * Math.sin((k * 10 - 0.75) * (2 * Math.PI) / 3) + 1;
+
+// seeded random so every render is identical
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+const R = rng(42);
+const PARTICLES = Array.from({ length: 220 }, () => ({
+  a: R() * Math.PI * 2, r: 600 + R() * 900, s: 1 + R() * 3,
+  hue: R(), spin: (R() - .5) * 0.6, delay: R() * 0.8, depth: R(),
+}));
+const STARS = Array.from({ length: 160 }, () => ({ x: R() * W, y: R() * H, s: R() * 1.6 + .3, tw: R() * 6 }));
+
+function grad(x0, y0, x1, y1, stops) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  stops.forEach(([o, c]) => g.addColorStop(o, c));
+  return g;
+}
+const brandGrad = (x0, y0, x1, y1) => grad(x0, y0, x1, y1, [[0, C.cyan], [.5, C.violet], [1, C.pink]]);
+
+function text(str, x, y, { size = 100, weight = 900, color = C.white, align = 'center', alpha = 1,
+  blur = 0, glow = 0, glowColor = C.violet, spacing = 0 } = {}) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.font = `${weight} ${size}px Cairo`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  ctx.direction = 'rtl';
+  if (spacing) ctx.letterSpacing = spacing + 'px';
+  if (blur > 0.2) ctx.filter = `blur(${blur}px)`;
+  if (glow) { ctx.shadowColor = glowColor; ctx.shadowBlur = glow; }
+  ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// ---- background -------------------------------------------------------------
+function background(t) {
+  const g = ctx.createRadialGradient(CX, CY, 0, CX, CY, W * .75);
+  g.addColorStop(0, C.bg1); g.addColorStop(1, C.bg0);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // drifting colour blobs
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const blobs = [[C.violet, .22, 0], [C.pink, .14, 2.1], [C.cyan, .12, 4.2]];
+  blobs.forEach(([col, a, ph]) => {
+    const bx = CX + Math.cos(t * .25 + ph) * 520, by = CY + Math.sin(t * .31 + ph) * 260;
+    const bg = ctx.createRadialGradient(bx, by, 0, bx, by, 700);
+    bg.addColorStop(0, hexA(col, a)); bg.addColorStop(1, hexA(col, 0));
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  });
+  ctx.restore();
+
+  // twinkling stars
+  STARS.forEach(s => {
+    ctx.fillStyle = `rgba(255,255,255,${0.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2 + s.tw))})`;
+    ctx.fillRect((s.x - t * 12 * s.s) % W + (s.x - t * 12 * s.s < 0 ? W : 0), s.y, s.s, s.s);
+  });
+
+  // perspective grid floor
+  ctx.save();
+  ctx.globalAlpha = 0.18;
+  ctx.strokeStyle = C.violet; ctx.lineWidth = 1;
+  const horizon = H * .62;
+  for (let i = -20; i <= 20; i++) {
+    ctx.beginPath(); ctx.moveTo(CX + i * 40, horizon); ctx.lineTo(CX + i * 260, H); ctx.stroke();
+  }
+  for (let i = 0; i < 14; i++) {
+    const k = ((i + t * .8) % 14) / 14, y = horizon + Math.pow(k, 2.2) * (H - horizon);
+    ctx.globalAlpha = 0.18 * k;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+// ---- logo mark: a looping "motion" ring with an orbiting dot ----------------
+function logoMark(x, y, r, k, t, alpha = 1) {
+  if (k <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.translate(x, y);
+  ctx.lineCap = 'round';
+  // outer arc draws on
+  ctx.strokeStyle = brandGrad(-r, -r, r, r);
+  ctx.lineWidth = r * .14;
+  ctx.shadowColor = C.violet; ctx.shadowBlur = 40;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, -Math.PI / 2 + t * .6, -Math.PI / 2 + t * .6 + Math.PI * 1.65 * easeOutExpo(k));
+  ctx.stroke();
+  // inner arc counter-rotates
+  ctx.lineWidth = r * .08;
+  ctx.strokeStyle = brandGrad(r, -r, -r, r);
+  ctx.beginPath();
+  ctx.arc(0, 0, r * .62, Math.PI / 2 - t * 1.1, Math.PI / 2 - t * 1.1 + Math.PI * 1.2 * easeOutExpo(prog(k, .25, 1)));
+  ctx.stroke();
+  // orbit dot
+  const da = -Math.PI / 2 + t * .6 + Math.PI * 1.65 * easeOutExpo(k);
+  ctx.fillStyle = C.white; ctx.shadowColor = C.pink; ctx.shadowBlur = 30;
+  ctx.beginPath(); ctx.arc(Math.cos(da) * r, Math.sin(da) * r, r * .1 * easeOutBack(prog(k, .6, 1)), 0, Math.PI * 2); ctx.fill();
+  // centre play-triangle
+  const tk = easeOutBack(prog(k, .45, 1), 2.4);
+  ctx.save();
+  ctx.scale(tk, tk);
+  ctx.fillStyle = brandGrad(-r * .3, -r * .3, r * .3, r * .3);
+  ctx.beginPath();
+  ctx.moveTo(-r * .2, -r * .26); ctx.lineTo(r * .3, 0); ctx.lineTo(-r * .2, r * .26); ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+}
+
+// ---- full-screen transition wipe -------------------------------------------
+function wipe(t, at) {
+  const k = prog(t, at - .35, at + .35);
+  if (k <= 0 || k >= 1) return;
+  ctx.save();
+  const bands = [C.pink, C.violet, C.cyan];
+  bands.forEach((col, i) => {
+    const kk = clamp(k * 1.25 - i * .1);
+    const x0 = lerp(-W * .4, W * 1.1, easeInOutCubic(kk));
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x0, 0); ctx.lineTo(x0 + 500, 0); ctx.lineTo(x0 + 200, H); ctx.lineTo(x0 - 300, H);
+    ctx.closePath(); ctx.fill();
+  });
+  ctx.restore();
+}
+
+function flash(t, at, dur = .25, max = .8) {
+  const k = prog(t, at, at + dur);
+  if (k <= 0 || k >= 1) return;
+  ctx.fillStyle = `rgba(255,255,255,${max * (1 - k)})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ===========================================================================
+// SCENE 1 (0–3.6s): particles implode into the logo mark
+// ===========================================================================
+function scene1(t) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  PARTICLES.forEach(p => {
+    const k = easeInExpo(prog(t, p.delay, 1.9));
+    const r = p.r * (1 - k) + 6;
+    const a = p.a + p.spin * t * 3 + k * 2.5;
+    const x = CX + Math.cos(a) * r, y = CY + Math.sin(a) * r * .7;
+    const col = p.hue < .33 ? C.cyan : p.hue < .66 ? C.violet : C.pink;
+    const alpha = (1 - prog(t, 1.85, 2.1)) * (0.4 + .6 * k);
+    if (alpha <= 0) return;
+    // streak
+    const tail = 30 + 140 * k;
+    ctx.strokeStyle = hexA(col, alpha * .7); ctx.lineWidth = p.s;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    ctx.lineTo(CX + Math.cos(a - .05) * (r + tail), CY + Math.sin(a - .05) * (r + tail) * .7); ctx.stroke();
+  });
+  ctx.restore();
+
+  // shockwave on impact
+  const sk = prog(t, 1.95, 2.9);
+  if (sk > 0 && sk < 1) {
+    ctx.save();
+    ctx.strokeStyle = hexA('#ffffff', (1 - sk) * .8);
+    ctx.lineWidth = 6 * (1 - sk);
+    ctx.beginPath(); ctx.arc(CX, CY, 40 + easeOutExpo(sk) * 900, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  flash(t, 1.95, .3, .6);
+
+  const lk = prog(t, 1.95, 3.0);
+  const out = easeInCubic(prog(t, 3.2, 3.6));
+  logoMark(CX, CY - 40 * lk, 120 * (1 + out * 4), lk, t, 1 - out);
+  text('حَرَكة', CX, CY + 190, {
+    size: 64, weight: 700, spacing: 6, alpha: easeOutCubic(prog(t, 2.4, 2.9)) * (1 - out),
+    blur: 12 * (1 - easeOutCubic(prog(t, 2.4, 2.9))),
+  });
+}
+
+// ===========================================================================
+// SCENE 2 (3.6–8s): kinetic typography
+// ===========================================================================
+function scene2(t) {
+  const lt = t - 3.6;
+  const words = [
+    { s: 'الإبداع', at: 0.05, y: CY - 250, size: 170, color: C.white },
+    { s: 'يبدأ', at: 0.55, y: CY - 10, size: 130, color: null },
+    { s: 'بالحركة', at: 1.05, y: CY + 230, size: 200, color: C.white },
+  ];
+  // camera push
+  const push = 1 + lt * .025;
+  ctx.save();
+  ctx.translate(CX, CY); ctx.scale(push, push); ctx.translate(-CX, -CY);
+
+  words.forEach((w, i) => {
+    const k = prog(lt, w.at, w.at + .55);
+    if (k <= 0) return;
+    const e = easeOutExpo(k);
+    const exitK = easeInCubic(prog(lt, 3.6 + i * .08, 4.2 + i * .08));
+    ctx.save();
+    const fromX = i % 2 ? -900 : 900;
+    ctx.translate(lerp(fromX, 0, e) + exitK * (i % 2 ? 1400 : -1400), 0);
+    // speed lines behind the word while it moves
+    if (k < 1) {
+      ctx.save();
+      ctx.globalAlpha = (1 - k) * .8;
+      ctx.fillStyle = i === 1 ? C.pink : C.cyan;
+      for (let j = 0; j < 5; j++) ctx.fillRect(CX + (i % 2 ? -1 : 1) * (380 + j * 70), w.y - 60 + j * 30, (i % 2 ? -1 : 1) * 260 * (1 - k), 4);
+      ctx.restore();
+    }
+    // highlight box behind middle word
+    if (i === 1) {
+      const bk = easeOutExpo(prog(lt, .7, 1.2));
+      ctx.save();
+      ctx.font = `900 ${w.size}px Cairo`;
+      const tw = ctx.measureText(w.s).width + 120;
+      ctx.fillStyle = brandGrad(CX - tw / 2, 0, CX + tw / 2, 0);
+      ctx.beginPath();
+      ctx.roundRect(CX + tw / 2 - tw * bk, w.y - w.size * .52, tw * bk, w.size * 1.04, 26);
+      ctx.fill();
+      ctx.restore();
+    }
+    text(w.s, CX, w.y, {
+      size: w.size, color: w.color || C.white,
+      blur: 18 * (1 - e) + exitK * 20, alpha: 1 - exitK,
+      glow: i === 2 ? 40 : 0, glowColor: C.violet,
+    });
+    ctx.restore();
+  });
+  ctx.restore();
+
+  // decorative brackets
+  const bk = easeOutExpo(prog(lt, 1.6, 2.3)) * (1 - easeInCubic(prog(lt, 3.5, 4)));
+  if (bk > 0) {
+    ctx.save();
+    ctx.strokeStyle = C.white; ctx.lineWidth = 5; ctx.globalAlpha = bk;
+    const bw = 560 * bk, bh = 440;
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+      ctx.beginPath();
+      ctx.moveTo(CX + sx * bw, CY + 10 + sy * (bh - 60));
+      ctx.lineTo(CX + sx * bw, CY + 10 + sy * bh);
+      ctx.lineTo(CX + sx * (bw - 60), CY + 10 + sy * bh);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+}
+
+// ===========================================================================
+// SCENE 3 (8–12.2s): geometric pillars — design · motion · story
+// ===========================================================================
+function scene3(t) {
+  const lt = t - 8;
+  const out = easeInCubic(prog(lt, 3.7, 4.2));
+
+  // rotating ring cluster in the middle
+  ctx.save();
+  ctx.translate(CX, CY - 40);
+  for (let i = 0; i < 6; i++) {
+    const k = easeOutExpo(prog(lt, i * .08, .9 + i * .08)) * (1 - out);
+    if (k <= 0) continue;
+    ctx.save();
+    ctx.rotate((i % 2 ? -1 : 1) * lt * (.3 + i * .12) + i);
+    ctx.strokeStyle = [C.cyan, C.violet, C.pink][i % 3];
+    ctx.globalAlpha = .55;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([20 + i * 10, 14 + i * 6]);
+    ctx.beginPath(); ctx.arc(0, 0, (90 + i * 55) * k, 0, Math.PI * 2 * k); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+
+  const items = [
+    { s: 'تصميم', icon: 'square', col: C.cyan },
+    { s: 'حركة', icon: 'circle', col: C.violet },
+    { s: 'قصة', icon: 'triangle', col: C.pink },
+  ];
+  // RTL order: first item sits on the right
+  items.forEach((it, i) => {
+    const x = CX + (1 - i) * 560;
+    const at = .5 + i * .35;
+    const k = prog(lt, at, at + .7);
+    if (k <= 0) return;
+    const e = easeOutBack(k, 2);
+    const ex = easeInCubic(prog(lt, 3.5 + i * .07, 4.0 + i * .07));
+    ctx.save();
+    ctx.translate(x, CY - 40 - ex * 900);
+    ctx.globalAlpha = clamp(k * 3) * (1 - ex);
+
+    // card
+    const ch = 420 * easeOutExpo(k);
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.strokeStyle = hexA(it.col, .7); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(-210, -ch / 2, 420, ch, 34); ctx.fill(); ctx.stroke();
+    // accent bar
+    ctx.fillStyle = it.col;
+    ctx.fillRect(-210 + 40, ch / 2 - 10, 340 * easeOutExpo(prog(lt, at + .3, at + 1)), 6);
+
+    // icon morph
+    ctx.save();
+    ctx.translate(0, -60);
+    ctx.rotate(lt * 1.2 * (i === 1 ? 0 : 1) + (1 - e) * 2);
+    ctx.scale(e, e);
+    ctx.fillStyle = it.col; ctx.shadowColor = it.col; ctx.shadowBlur = 40;
+    ctx.beginPath();
+    if (it.icon === 'square') ctx.roundRect(-60, -60, 120, 120, 18);
+    else if (it.icon === 'circle') {
+      ctx.arc(0, 0, 66, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = C.white; ctx.beginPath();
+      ctx.arc(Math.cos(lt * 4) * 66, Math.sin(lt * 4) * 66, 14, 0, Math.PI * 2);
+    } else { ctx.moveTo(0, -72); ctx.lineTo(66, 52); ctx.lineTo(-66, 52); ctx.closePath(); }
+    ctx.fill();
+    ctx.restore();
+
+    text(it.s, 0, 110, { size: 84, blur: 10 * (1 - clamp(k * 1.5)) });
+    ctx.restore();
+  });
+
+  // headline
+  const hk = easeOutExpo(prog(lt, 1.8, 2.5)) * (1 - out);
+  text('ثلاثة عناصر… تجربة واحدة', CX, H - 150, { size: 54, weight: 700, alpha: hk, color: C.dim, blur: 8 * (1 - hk) });
+}
+
+// ===========================================================================
+// SCENE 4 (12.2–16.4s): animated stats / infographic
+// ===========================================================================
+function scene4(t) {
+  const lt = t - 12.2;
+  const out = easeInCubic(prog(lt, 3.7, 4.2));
+  const stats = [
+    { v: 250, pre: '+', suf: '', label: 'مشروع منجز', pct: .82, col: C.cyan },
+    { v: 98, pre: '', suf: '%', label: 'رضا العملاء', pct: .98, col: C.violet },
+    { v: 12, pre: '', suf: '', label: 'جائزة دولية', pct: .6, col: C.pink },
+  ];
+  text('أرقامنا تتحدث', CX, 170, {
+    size: 80, alpha: easeOutCubic(prog(lt, 0, .5)) * (1 - out),
+    blur: 10 * (1 - easeOutCubic(prog(lt, 0, .5))),
+  });
+  const ul = easeOutExpo(prog(lt, .3, 1));
+  ctx.fillStyle = brandGrad(CX - 200, 0, CX + 200, 0);
+  ctx.globalAlpha = 1 - out;
+  ctx.fillRect(CX - 200 * ul, 235, 400 * ul, 6);
+  ctx.globalAlpha = 1;
+
+  stats.forEach((s, i) => {
+    const x = CX + (1 - i) * 560, y = CY + 70;
+    const at = .4 + i * .25;
+    const k = prog(lt, at, at + 1.8);
+    if (k <= 0) return;
+    const e = easeOutCubic(k);
+    const pop = easeOutElastic(prog(lt, at, at + 1.1));
+    ctx.save();
+    ctx.translate(x, y + out * 60);
+    ctx.globalAlpha = 1 - out;
+    ctx.scale(pop, pop);
+    // track
+    ctx.lineWidth = 22; ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath(); ctx.arc(0, 0, 175, 0, Math.PI * 2); ctx.stroke();
+    // value arc
+    ctx.strokeStyle = s.col; ctx.shadowColor = s.col; ctx.shadowBlur = 30;
+    ctx.beginPath(); ctx.arc(0, 0, 175, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * s.pct * e); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // ticks
+    for (let j = 0; j < 60; j++) {
+      const a = j / 60 * Math.PI * 2 + lt * .2;
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * 205, Math.sin(a) * 205);
+      ctx.lineTo(Math.cos(a) * (j % 5 ? 212 : 222), Math.sin(a) * (j % 5 ? 212 : 222)); ctx.stroke();
+    }
+    ctx.restore();
+    // number (LTR digits) + label
+    ctx.save();
+    ctx.globalAlpha = (1 - out) * clamp(k * 4);
+    ctx.font = '900 110px Cairo'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.direction = 'ltr'; ctx.fillStyle = C.white;
+    ctx.fillText(`${s.pre}${Math.round(s.v * e)}${s.suf}`, x, y - 8 + out * 60);
+    ctx.restore();
+    text(s.label, x, y + 290 + out * 60, { size: 46, weight: 700, color: C.dim, alpha: (1 - out) * easeOutCubic(prog(lt, at + .5, at + 1)) });
+  });
+}
+
+// ===========================================================================
+// SCENE 5 (16.4–20s): outro / logo lock-up
+// ===========================================================================
+function scene5(t) {
+  const lt = t - 16.4;
+  const fade = 1 - easeInCubic(prog(lt, 3.0, 3.6));
+  ctx.save();
+  ctx.globalAlpha = fade;
+
+  // radial burst lines
+  ctx.save();
+  ctx.translate(CX, CY - 60);
+  const bk = easeOutExpo(prog(lt, .1, 1.2));
+  for (let i = 0; i < 48; i++) {
+    const a = i / 48 * Math.PI * 2 + lt * .1;
+    const r0 = 180 + bk * 20, r1 = r0 + 15 + (i % 3) * 22 * bk;
+    ctx.strokeStyle = hexA([C.cyan, C.violet, C.pink][i % 3], .5 * bk);
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); ctx.stroke();
+  }
+  ctx.restore();
+
+  logoMark(CX, CY - 60, 150, prog(lt, .1, 1.3), t);
+
+  const tk = easeOutExpo(prog(lt, .7, 1.4));
+  // gradient-filled brand name with light sweep
+  ctx.save();
+  ctx.font = '900 150px Cairo'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
+  ctx.globalAlpha = fade * tk;
+  ctx.filter = `blur(${14 * (1 - tk)}px)`;
+  ctx.fillStyle = brandGrad(CX - 300, 0, CX + 300, 0);
+  ctx.fillText('حَرَكة', CX, CY + 210 + (1 - tk) * 60);
+  ctx.restore();
+
+  // shine pass drawn as a clipped highlight over the word
+  const sk = prog(lt, 1.5, 2.3);
+  if (sk > 0 && sk < 1) {
+    ctx.save();
+    ctx.font = '900 150px Cairo'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
+    const shx = lerp(CX + 450, CX - 450, easeInOutCubic(sk));
+    const sg = ctx.createLinearGradient(shx - 120, 0, shx + 120, 0);
+    sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(.5, 'rgba(255,255,255,0.95)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sg;
+    ctx.fillText('حَرَكة', CX, CY + 210);
+    ctx.restore();
+  }
+
+  const gk = easeOutCubic(prog(lt, 1.4, 2.0));
+  text('استوديو موشن جرافيك احترافي', CX, CY + 340, { size: 48, weight: 700, color: C.dim, spacing: 2, alpha: gk, blur: 8 * (1 - gk) });
+  // underline
+  ctx.fillStyle = brandGrad(CX - 260, 0, CX + 260, 0);
+  const lk = easeOutExpo(prog(lt, 1.8, 2.5));
+  ctx.fillRect(CX - 260 * lk, CY + 392, 520 * lk, 4);
+  ctx.restore();
+}
+
+// ---- compositor -------------------------------------------------------------
+function render(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none';
+  background(t);
+  if (t < 3.7) scene1(t);
+  if (t >= 3.6 && t < 8.3) scene2(t);
+  if (t >= 8.0 && t < 12.5) scene3(t);
+  if (t >= 12.2 && t < 16.7) scene4(t);
+  if (t >= 16.4) scene5(t);
+  wipe(t, 8.05);
+  wipe(t, 12.25);
+  flash(t, 3.6, .2, .5);
+  flash(t, 16.45, .3, .7);
+
+  // vignette
+  const v = ctx.createRadialGradient(CX, CY, H * .35, CX, CY, W * .7);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.7)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  // global fade-in
+  const fin = 1 - prog(t, 0, .4);
+  if (fin > 0) { ctx.fillStyle = `rgba(0,0,0,${fin})`; ctx.fillRect(0, 0, W, H); }
+}
+
+window.render = render;
+window.DURATION = DURATION;
+window.ready = document.fonts.ready.then(() => Promise.all(
+  ['400', '700', '900'].map(w => document.fonts.load(`${w} 40px Cairo`, 'حركة 0123'))));
+
+// live preview when opened directly (render.js sets ?capture)
+if (!location.search.includes('capture')) {
+  window.ready.then(() => {
+    const t0 = performance.now();
+    (function loop() { render(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(loop); })();
+  });
+}
+</script>
+</body>
+</html>
