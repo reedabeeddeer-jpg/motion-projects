@@ -27,3 +27,18 @@ npm run render   # out/logo-reveal.mp4
 ```
 
 النصوص قابلة للتعديل من `defaultProps` في `src/Root.tsx`. لاستخدام Chromium مثبت مسبقاً بدل التنزيل: اضبط `REMOTION_BROWSER` على مسار المتصفح.
+
+## ai-tool
+
+فيديو موشن جرافيك عن أداة الذكاء الاصطناعي: 15 ثانية، 1920×1080 (16:9)، 30fps، مع موسيقى ومؤثرات مولّدة برمجياً.
+
+المشاهد: شبكة عصبية تتجمع في شريحة AI ← عنوان «أداة الذكاء الاصطناعي» ← محادثة تجريبية مع المساعد ← المزايا (كتابة، صور، برمجة، تحليل) ← الخاتمة «المستقبل بين يديك».
+
+- `src/ai-tool.html`: الأنيميشن (Canvas).
+- `scripts/soundtrack_ai.py`: الصوت في `output/ai-tool-soundtrack.wav`.
+
+```bash
+npm run ai:audio
+npm run ai:render   # output/ai-tool.mp4
+npm run ai:preview  # صور ثابتة في output/stills/ai-tool
+```
