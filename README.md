@@ -1,1 +1,16 @@
 # motion-projects
+
+فيديو موشن جرافيك (1920×1080، 30fps، 13 ثانية) مع موسيقى مولّدة برمجياً.
+
+- `src/motion.html`: الأنيميشن (Canvas). افتحه في المتصفح للمعاينة المباشرة.
+- `scripts/soundtrack.py`: يولّد الموسيقى والمؤثرات الصوتية في `output/soundtrack.wav`.
+- `scripts/render.mjs`: يصيّر الفيديو إطاراً بإطار ويخرج `output/motion.mp4`.
+
+```bash
+npm install
+npm run audio
+npm run render     # output/motion.mp4
+npm run preview    # صور ثابتة في output/stills
+```
+
+Font: Cairo (SIL OFL), في `assets/fonts`.
