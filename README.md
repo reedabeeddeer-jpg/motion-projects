@@ -27,3 +27,13 @@ npm run render   # out/logo-reveal.mp4
 ```
 
 النصوص قابلة للتعديل من `defaultProps` في `src/Root.tsx`. لاستخدام Chromium مثبت مسبقاً بدل التنزيل: اضبط `REMOTION_BROWSER` على مسار المتصفح.
+
+## calm (موشن هادئ)
+
+فيديو تأمّلي 20 ثانية (1080p، 30fps): دائرة تتنفّس (شهيق / زفير) مع شفق وجزيئات ضوئية، وموسيقى محيطية هادئة بصوت منخفض جداً (ذروة ‎-18 dB).
+
+```bash
+npm run calm:audio     # output/calm.wav
+npm run calm:preview   # output/stills-calm
+npm run calm:render    # output/calm.mp4
+```
