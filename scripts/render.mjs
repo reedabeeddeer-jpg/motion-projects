@@ -1,5 +1,5 @@
 // Renders src/motion.html frame-by-frame with headless Chromium and encodes an MP4 with ffmpeg.
-// Usage: node scripts/render.mjs [--src src/motion.html] [--fps 30] [--out output/motion.mp4] [--audio file] [--preview]
+// Usage: node scripts/render.mjs [--src src/motion.html] [--fps 30] [--out output/motion.mp4] [--audio output/soundtrack.wav] [--preview]
 import { chromium } from "playwright";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,7 +23,7 @@ const duration = await page.evaluate(() => window.DURATION);
 const frames = Math.round(duration * fps);
 
 if (args.includes("--preview")) {
-  const dir = path.join(root, "output/stills");
+  const dir = path.join(root, "output/stills", path.basename(src, ".html"));
   fs.mkdirSync(dir, { recursive: true });
   for (const t of (opt("--times", "0.8,2,2.8,4.8,7.8,8.5,11.5")).split(",").map(Number)) {
     const png = await page.evaluate(t => { window.render(t); return document.getElementById("c").toDataURL("image/png"); }, t);
