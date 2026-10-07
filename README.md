@@ -15,6 +15,17 @@ npm run preview    # صور ثابتة في output/stills
 
 Font: Cairo (SIL OFL), في `assets/fonts`.
 
+## الفيديو الرياضي
+
+فيديو موشن جرافيك رياضي (1920×1080، 30fps، 12.5 ثانية) مع صوت مولّد برمجياً: عنوان، سباق على المضمار، بطاقات أرقام للكرات، وكأس ختامي.
+
+- `src/sports.html`: الأنيميشن. `scripts/sports-soundtrack.py`: الصوت.
+- الناتج الجاهز للتنزيل: `output/sports-motion.mp4` (الصوت: `output/sports-soundtrack.wav`).
+
+```bash
+npm run sports:audio && npm run sports:render
+```
+
 ## remotion-logo
 
 مشروع Remotion: ظهور لوغو بحركة ناعمة مع نص عربي تحته، 10 ثوانٍ بدقة 1080p على خلفية متدرجة داكنة.

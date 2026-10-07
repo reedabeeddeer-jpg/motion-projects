@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Sports Motion Graphics</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #07120E; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 12.5;
+const C = {
+  bg: "#07120E", panel: "#0F2119", white: "#F4FFF8", muted: "#7FA894",
+  green: "#00E676", orange: "#FF6D00", yellow: "#FFEA00", red: "#FF3D57", blue: "#29B6F6",
+};
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eOutBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const font = (w, s) => `${w} ${s}px Cairo`;
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+function text(str, x, y, o = {}) {
+  ctx.save();
+  ctx.direction = "rtl";
+  ctx.font = o.font || font(700, 60);
+  ctx.textAlign = o.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = o.color || C.white;
+  ctx.globalAlpha *= o.alpha ?? 1;
+  if (o.shadow) { ctx.shadowColor = o.shadow; ctx.shadowBlur = o.blur ?? 30; }
+  if (o.scale) { ctx.translate(x, y); ctx.scale(o.scale, o.scale); ctx.fillText(str, 0, 0); }
+  else ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// ---------- background ----------
+function drawBackground(t) {
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(CX, CY, 80, CX, CY, 1200);
+  g.addColorStop(0, "rgba(0,230,118,0.18)");
+  g.addColorStop(0.6, "rgba(0,230,118,0.04)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // diagonal speed stripes sliding across the stadium floor
+  ctx.save();
+  ctx.rotate(-0.38);
+  const off = (t * 120) % 240;
+  for (let i = -6; i < 16; i++) {
+    ctx.fillStyle = i % 2 ? "rgba(0,230,118,0.035)" : "rgba(255,255,255,0.012)";
+    ctx.fillRect(i * 240 + off - 600, -400, 120, 2200);
+  }
+  ctx.restore();
+
+  // vignette
+  const v = ctx.createRadialGradient(CX, CY, 500, CX, CY, 1150);
+  v.addColorStop(0, "rgba(0,0,0,0)");
+  v.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// horizontal speed lines streaking across
+function speedLines(t, strength = 1, seed = 11, color = C.green) {
+  const r = rng(seed);
+  ctx.save();
+  for (let i = 0; i < 26; i++) {
+    const y = r() * H, len = 200 + r() * 600, sp = 900 + r() * 1800, ph = r();
+    const x = ((t * sp + ph * (W + len)) % (W + len * 2)) - len;
+    const g = ctx.createLinearGradient(x, 0, x + len, 0);
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(1, color);
+    ctx.globalAlpha = 0.45 * strength * (0.4 + r());
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, len, 2 + r() * 3);
+  }
+  ctx.restore();
+}
+
+// diagonal wipe panel used between scenes: crosses the screen centred on `at`
+function wipe(t, at, color = C.green) {
+  const k = prog(t, at - 0.35, 0.7);
+  if (k <= 0 || k >= 1) return;
+  const x = lerp(-700, W + 700, eInOutCubic(k));
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x - 260, 0); ctx.lineTo(x + 260, 0); ctx.lineTo(x + 60, H); ctx.lineTo(x - 460, H);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = C.white;
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(x + 280, 0); ctx.lineTo(x + 320, 0); ctx.lineTo(x + 120, H); ctx.lineTo(x + 80, H);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+const sceneAlpha = (t, a, b, fade = 0.3) => clamp((t - a) / fade) * clamp((b - t) / fade);
+
+// ---------- balls ----------
+function football(r, rot) {
+  ctx.save(); ctx.rotate(rot);
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.clip();
+  const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r);
+  g.addColorStop(0, "#FFFFFF"); g.addColorStop(1, "#C9D6CF");
+  ctx.fillStyle = g; ctx.fillRect(-r, -r, 2 * r, 2 * r);
+  const pent = (cx, cy, s, a0) => {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) { const a = a0 + i * 2 * Math.PI / 5; ctx.lineTo(cx + Math.cos(a) * s, cy + Math.sin(a) * s); }
+    ctx.closePath(); ctx.fillStyle = "#14201B"; ctx.fill();
+  };
+  pent(0, 0, r * 0.3, -Math.PI / 2);
+  ctx.strokeStyle = "#14201B"; ctx.lineWidth = r * 0.04;
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3); ctx.lineTo(Math.cos(a) * r * 0.65, Math.sin(a) * r * 0.65); ctx.stroke();
+    pent(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95, r * 0.28, a + Math.PI / 2 + Math.PI / 5);
+  }
+  ctx.restore();
+  ctx.save(); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+}
+
+function basketball(r, rot) {
+  ctx.save(); ctx.rotate(rot);
+  const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r);
+  g.addColorStop(0, "#FF9A3D"); g.addColorStop(1, "#D4510A");
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+  ctx.clip();
+  ctx.strokeStyle = "#2A1206"; ctx.lineWidth = r * 0.06;
+  ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.stroke();
+  ctx.beginPath(); ctx.arc(-r * 1.25, 0, r * 0.9, -0.9, 0.9); ctx.stroke();
+  ctx.beginPath(); ctx.arc(r * 1.25, 0, r * 0.9, Math.PI - 0.9, Math.PI + 0.9); ctx.stroke();
+  ctx.restore();
+}
+
+function tennisBall(r, rot) {
+  ctx.save(); ctx.rotate(rot);
+  const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r);
+  g.addColorStop(0, "#F4FF5A"); g.addColorStop(1, "#9BC81C");
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+  ctx.clip();
+  ctx.strokeStyle = "#F4FFF8"; ctx.lineWidth = r * 0.07;
+  ctx.beginPath(); ctx.arc(-r * 1.1, 0, r * 0.95, -1.0, 1.0); ctx.stroke();
+  ctx.beginPath(); ctx.arc(r * 1.1, 0, r * 0.95, Math.PI - 1.0, Math.PI + 1.0); ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- scene 1: title ----------
+function sceneTitle(t) {
+  const a = sceneAlpha(t, 0, 3.2, 0.001) * clamp((3.2 - t) / 0.3);
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  speedLines(t, 1.2, 5);
+
+  // big burst of rays behind the title
+  const kRay = eOutExpo(prog(t, 0.4, 1.2));
+  ctx.save(); ctx.translate(CX, CY - 20); ctx.rotate(t * 0.15);
+  for (let i = 0; i < 18; i++) {
+    ctx.rotate(Math.PI * 2 / 18);
+    ctx.fillStyle = i % 2 ? "rgba(0,230,118,0.10)" : "rgba(255,234,0,0.05)";
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(1500 * kRay, -90); ctx.lineTo(1500 * kRay, 90); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+
+  const kT = prog(t, 0.45, 0.8);
+  const slam = kT < 1 ? lerp(2.4, 1, eOutBack(kT)) : 1;
+  const shake = t > 0.55 && t < 0.85 ? Math.sin(t * 90) * 8 * (0.85 - t) / 0.3 : 0;
+  // slanted accent bar
+  const kBar = eOutExpo(prog(t, 0.2, 0.7));
+  ctx.save(); ctx.translate(CX + shake, CY - 20); ctx.transform(1, 0, -0.22, 1, 0, 0);
+  ctx.fillStyle = C.green; ctx.globalAlpha *= 0.95;
+  ctx.fillRect(-720 * kBar, -150, 1440 * kBar, 300);
+  ctx.restore();
+  text("عالم الرياضة", CX + shake, CY - 28, { font: font(900, 190), color: "#04130B", scale: slam, alpha: kT });
+  text("SPORTS WORLD", CX, CY + 205, { font: font(900, 64), color: C.yellow, alpha: prog(t, 1.3, 0.5), shadow: C.yellow, blur: 20 });
+  text("طاقة  •  تحدٍّ  •  انتصار", CX, CY + 300, { font: font(700, 54), color: C.white, alpha: eOutCubic(prog(t, 1.6, 0.6)) });
+  ctx.restore();
+}
+
+// ---------- scene 2: the running track ----------
+const TRACK = { L: 640, R: 230, lanes: 6, lw: 36 };
+const LAPS = 1.0;
+function trackPos(frac, lane) {
+  const r = TRACK.R + lane * TRACK.lw, L = TRACK.L;
+  const P = 2 * L + 2 * Math.PI * r;
+  let s = ((frac % 1) + 1) % 1 * P;
+  if (s < L) return { x: -L / 2 + s, y: r, ang: 0 };
+  s -= L;
+  if (s < Math.PI * r) { const a = Math.PI / 2 - s / r; return { x: L / 2 + Math.cos(a) * r, y: Math.sin(a) * r, ang: a - Math.PI / 2 }; }
+  s -= Math.PI * r;
+  if (s < L) return { x: L / 2 - s, y: -r, ang: Math.PI };
+  s -= L;
+  const a = -Math.PI / 2 - s / r;
+  return { x: -L / 2 + Math.cos(a) * r, y: Math.sin(a) * r, ang: a - Math.PI / 2 };
+}
+function stadiumPath(r) {
+  const L = TRACK.L;
+  ctx.beginPath();
+  ctx.moveTo(-L / 2, r);
+  ctx.lineTo(L / 2, r);
+  ctx.arc(L / 2, 0, r, Math.PI / 2, -Math.PI / 2, true);
+  ctx.lineTo(-L / 2, -r);
+  ctx.arc(-L / 2, 0, r, -Math.PI / 2, Math.PI / 2, true);
+  ctx.closePath();
+}
+const RUNNERS = [
+  { c: C.red, dur: 2.45 }, { c: C.yellow, dur: 2.4 }, { c: C.green, dur: 2.25 },
+  { c: C.blue, dur: 2.5 }, { c: C.orange, dur: 2.35 }, { c: C.white, dur: 2.48 },
+];
+const GUN = 4.3;
+
+function sceneTrack(t) {
+  const a = sceneAlpha(t, 2.85, 7.3, 0.35);
+  if (a <= 0) return;
+  const lt = t - 2.85;
+  ctx.save(); ctx.globalAlpha = a;
+
+  // heading
+  text("المسار", CX, 88, { font: font(900, 96), color: C.white, alpha: eOutCubic(prog(lt, 0.1, 0.5)), shadow: C.green, blur: 28 });
+  text("كل بطل يبدأ من خط البداية", CX, 146, { font: font(700, 40), color: C.muted, alpha: eOutCubic(prog(lt, 0.35, 0.5)) });
+
+  ctx.save();
+  ctx.translate(CX, CY + 80);
+  const pop = eOutBack(prog(lt, 0.0, 0.7));
+  ctx.scale(lerp(0.6, 1, pop), lerp(0.6, 1, pop));
+  ctx.rotate(lerp(-0.3, 0, eOutCubic(prog(lt, 0, 0.8))));
+
+  // track surface, then infield grass on top
+  const outer = TRACK.R + TRACK.lanes * TRACK.lw;
+  stadiumPath(outer);
+  ctx.fillStyle = "#B8461F"; ctx.fill();
+  stadiumPath(TRACK.R - 8);
+  ctx.fillStyle = "#0B3B22"; ctx.fill();
+  ctx.save(); stadiumPath(TRACK.R - 8); ctx.clip();
+  for (let i = -8; i < 9; i++) { ctx.fillStyle = i % 2 ? "rgba(0,230,118,0.10)" : "rgba(0,0,0,0.12)"; ctx.fillRect(i * 80, -300, 80, 600); }
+  ctx.restore();
+  ctx.strokeStyle = "rgba(244,255,248,0.55)"; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(0, 0, 70, 0, Math.PI * 2); ctx.moveTo(0, -(TRACK.R - 8)); ctx.lineTo(0, TRACK.R - 8); ctx.stroke();
+
+  ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 2.5;
+  for (let i = 0; i <= TRACK.lanes; i++) { stadiumPath(TRACK.R + i * TRACK.lw - 0.0); ctx.stroke(); }
+
+  // start / finish line (bottom straight, left of centre)
+  const sx = -TRACK.L / 2 + 120;
+  ctx.fillStyle = C.white;
+  for (let i = 0; i < TRACK.lanes * 4; i++) {
+    ctx.fillRect(sx + (i % 2) * 10, TRACK.R + (i / 2 | 0) * (TRACK.lw / 2) - 0, 10, TRACK.lw / 2);
+  }
+  // runners
+  const dt = t - GUN;
+  RUNNERS.forEach((rn, i) => {
+    const lane = i + 0.5;
+    const startFrac = 0.0;
+    const k = clamp(dt / rn.dur);
+    const frac = startFrac + eInOutCubic(k) * LAPS - 0.0;
+    const off = (sx + TRACK.L / 2) / (2 * TRACK.L + 2 * Math.PI * (TRACK.R + lane * TRACK.lw));
+    const pos = trackPos(frac + off, lane);
+    // trail
+    if (dt > 0 && k < 1) {
+      for (let j = 1; j <= 14; j++) {
+        const p2 = trackPos(frac + off - j * 0.0035, lane);
+        ctx.globalAlpha = a * (1 - j / 15) * 0.55;
+        ctx.fillStyle = rn.c;
+        ctx.beginPath(); ctx.arc(p2.x, p2.y, 15 * (1 - j / 18), 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = a;
+    }
+    ctx.shadowColor = rn.c; ctx.shadowBlur = 24;
+    ctx.fillStyle = rn.c;
+    ctx.beginPath(); ctx.arc(pos.x, pos.y, 16, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.beginPath(); ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.restore();
+
+  // "READY / SET / GO" overlay
+  const cd = [["استعد", 3.3], ["جاهز", 3.8], ["انطلق!", GUN]];
+  cd.forEach(([s, at], i) => {
+    const k = prog(t, at, 0.6);
+    if (k > 0 && k < 1) {
+      const sc = lerp(1.6, 1, eOutCubic(clamp(k * 3)));
+      text(s, CX, CY + 80, { font: font(900, 170), color: i === 2 ? C.green : C.yellow, scale: sc, alpha: 1 - eInCubic(k), shadow: "#000", blur: 40 });
+    }
+  });
+
+  // winner banner
+  const win = Math.min(...RUNNERS.map(r => r.dur)) + GUN;
+  const kW = eOutBack(prog(t, win + 0.05, 0.5));
+  if (kW > 0) {
+    ctx.save(); ctx.translate(CX, 980); ctx.scale(kW, kW);
+    ctx.fillStyle = C.green; ctx.beginPath(); ctx.roundRect(-300, -52, 600, 104, 52); ctx.fill();
+    text("المركز الأول", 0, 4, { font: font(900, 62), color: "#04130B" });
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------- scene 3: ball stat cards ----------
+const CARDS = [
+  { ball: football, label: "دقيقة في المباراة", value: 90, color: C.green, bounce: 0, sport: "كرة القدم" },
+  { ball: basketball, label: "ثانية للتسديد", value: 24, color: C.orange, bounce: 0.7, sport: "كرة السلة" },
+  { ball: tennisBall, label: "أشواط للفوز بالمجموعة", value: 6, color: C.yellow, bounce: 1.4, sport: "التنس" },
+];
+function sceneCards(t) {
+  const a = sceneAlpha(t, 7.0, 10.1, 0.35);
+  if (a <= 0) return;
+  const lt = t - 7.0;
+  ctx.save(); ctx.globalAlpha = a;
+  text("أرقام تصنع الأبطال", CX, 120, { font: font(900, 92), color: C.white, alpha: eOutCubic(prog(lt, 0.15, 0.5)), shadow: C.green, blur: 26 });
+
+  CARDS.forEach((cd, i) => {
+    const x = CX + (1 - i) * 520; // RTL: first card on the right
+    const k = prog(lt, 0.35 + i * 0.3, 0.7);
+    const kk = eOutBack(k);
+    const y0 = lerp(260, 0, kk);
+    ctx.save();
+    ctx.translate(x, 600 + y0);
+    ctx.globalAlpha = a * clamp(k * 2);
+    // card
+    ctx.fillStyle = C.panel; ctx.beginPath(); ctx.roundRect(-210, -330, 420, 660, 40); ctx.fill();
+    ctx.strokeStyle = cd.color; ctx.lineWidth = 4; ctx.globalAlpha *= 0.8; ctx.stroke(); ctx.globalAlpha = a * clamp(k * 2);
+    // accent top bar
+    ctx.fillStyle = cd.color; ctx.beginPath(); ctx.roundRect(-210, -330, 420, 14, [40, 40, 0, 0]); ctx.fill();
+
+    // ball with decaying bounce
+    const bt = Math.max(0, lt - 0.6 - i * 0.3);
+    const bounce = Math.abs(Math.sin(bt * 6.5)) * 120 * Math.exp(-bt * 1.1);
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.beginPath(); ctx.ellipse(0, -62, 70 - bounce * 0.2, 14, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.translate(0, -180 - bounce + 60); ctx.scale(1, 1);
+    cd.ball(86, bt * 4);
+    ctx.restore();
+
+    // counter
+    const cnt = Math.round(cd.value * eOutCubic(prog(lt, 0.9 + i * 0.3, 1.1)));
+    text(String(cnt), 0, 100, { font: font(900, 150), color: cd.color, shadow: cd.color, blur: 24 });
+    text(cd.label, 0, 205, { font: font(700, 36), color: C.white });
+    text(cd.sport, 0, 270, { font: font(900, 46), color: cd.color });
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ---------- scene 4: finale with trophy ----------
+function trophy(s) {
+  ctx.save(); ctx.scale(s, s);
+  const g = ctx.createLinearGradient(-120, -160, 120, 160);
+  g.addColorStop(0, "#FFF59D"); g.addColorStop(0.5, "#FFC400"); g.addColorStop(1, "#B8860B");
+  ctx.fillStyle = g; ctx.strokeStyle = "#FFC400"; ctx.lineWidth = 16; ctx.lineCap = "round";
+  // handles
+  ctx.beginPath(); ctx.arc(-118, -90, 52, Math.PI * 0.5, Math.PI * 1.5); ctx.stroke();
+  ctx.beginPath(); ctx.arc(118, -90, 52, -Math.PI * 0.5, Math.PI * 0.5); ctx.stroke();
+  // cup
+  ctx.beginPath();
+  ctx.moveTo(-120, -190); ctx.lineTo(120, -190);
+  ctx.bezierCurveTo(120, -40, 70, 20, 28, 40);
+  ctx.lineTo(28, 100); ctx.lineTo(-28, 100); ctx.lineTo(-28, 40);
+  ctx.bezierCurveTo(-70, 20, -120, -40, -120, -190);
+  ctx.closePath(); ctx.fill();
+  // stem + base
+  ctx.beginPath(); ctx.roundRect(-80, 100, 160, 34, 10); ctx.fill();
+  ctx.fillStyle = "#8D6A0B"; ctx.beginPath(); ctx.roundRect(-110, 134, 220, 44, 12); ctx.fill();
+  // star + shine
+  ctx.fillStyle = "#04130B"; ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const r = i % 2 ? 22 : 52, a = -Math.PI / 2 + i * Math.PI / 5; ctx.lineTo(Math.cos(a) * r, -105 + Math.sin(a) * r); }
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.beginPath(); ctx.roundRect(-92, -170, 22, 110, 11); ctx.fill();
+  ctx.restore();
+}
+const confetti = (() => {
+  const r = rng(99), cols = [C.green, C.yellow, C.orange, C.red, C.blue, C.white], out = [];
+  for (let i = 0; i < 140; i++) out.push({ x: r() * W, d: r() * 1.2, v: 260 + r() * 380, w: 10 + r() * 14, c: cols[i % cols.length], s: 2 + r() * 5, ph: r() * 6.28 });
+  return out;
+})();
+function sceneFinale(t) {
+  const a = clamp((t - 9.75) / 0.2) * clamp((DURATION - t) / 0.01);
+  if (a <= 0) return;
+  const lt = t - 9.75;
+  ctx.save(); ctx.globalAlpha = a;
+  speedLines(t, 0.9, 21, C.yellow);
+
+  // glow behind trophy
+  const kT = eOutBack(prog(lt, 0.2, 0.8));
+  const gl = ctx.createRadialGradient(CX, 390, 20, CX, 390, 460);
+  gl.addColorStop(0, "rgba(255,196,0,0.45)"); gl.addColorStop(1, "rgba(255,196,0,0)");
+  ctx.fillStyle = gl; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.translate(CX, 410 + Math.sin(t * 2.4) * 8); ctx.rotate(Math.sin(t * 1.6) * 0.03); trophy(1.15 * kT); ctx.restore();
+
+  text("اصنع بطولتك", CX, 770, { font: font(900, 170), color: C.white, alpha: eOutCubic(prog(lt, 0.45, 0.5)), scale: lerp(1.25, 1, eOutCubic(prog(lt, 0.45, 0.5))), shadow: C.green, blur: 36 });
+  text("ابدأ اليوم  •  لا تتوقف أبداً", CX, 905, { font: font(700, 54), color: C.yellow, alpha: eOutCubic(prog(lt, 0.9, 0.5)) });
+
+  // confetti burst
+  confetti.forEach(p => {
+    const ct = lt - 0.3 - p.d * 0.4; if (ct < 0) return;
+    const y = -40 + ct * p.v, x = p.x + Math.sin(ct * 3 + p.ph) * 60;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ct * p.s + p.ph); ctx.scale(1, Math.cos(ct * 6 + p.ph));
+    ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.w / 4, p.w, p.w / 2); ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ---------- compose ----------
+function render(t) {
+  ctx.save();
+  ctx.clearRect(0, 0, W, H);
+  drawBackground(t);
+  sceneTitle(t);
+  sceneTrack(t);
+  sceneCards(t);
+  sceneFinale(t);
+  wipe(t, 2.85); wipe(t, 7.0); wipe(t, 9.75);
+  // flash at final hit
+  const fl = 1 - prog(t, 9.95, 0.25);
+  if (t >= 9.95 && fl > 0) { ctx.fillStyle = `rgba(255,255,255,${0.35 * fl})`; ctx.fillRect(0, 0, W, H); }
+  // fade in from / out to black
+  const fi = 1 - prog(t, 0, 0.25), fo = prog(t, DURATION - 0.6, 0.6);
+  const f = Math.max(fi, fo);
+  if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = Promise.all([900, 700, 400].flatMap(w => [
+  document.fonts.load(`${w} 50px Cairo`, "عالم الرياضة"),
+  document.fonts.load(`${w} 50px Cairo`, "ABC 0123"),
+])).then(() => render(0));
+if (new URLSearchParams(location.search).has("play")) {
+  window.ready.then(() => {
+    const t0 = performance.now();
+    (function loop() { render(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(loop); })();
+  });
+}
+</script>
+</body>
+</html>

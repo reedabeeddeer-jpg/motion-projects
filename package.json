@@ -5,7 +5,9 @@
   "scripts": {
     "audio": "python3 scripts/soundtrack.py",
     "preview": "node scripts/render.mjs --preview",
-    "render": "node scripts/render.mjs"
+    "render": "node scripts/render.mjs",
+    "sports:audio": "python3 scripts/sports-soundtrack.py",
+    "sports:render": "node scripts/render.mjs --src src/sports.html --out output/sports-motion.mp4 --audio output/sports-soundtrack.wav"
   },
   "devDependencies": {
     "playwright": "1.56.1"
