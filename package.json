@@ -5,7 +5,9 @@
   "scripts": {
     "audio": "python3 scripts/soundtrack.py",
     "preview": "node scripts/render.mjs --preview",
-    "render": "node scripts/render.mjs"
+    "render": "node scripts/render.mjs",
+    "grunge:audio": "python3 scripts/grunge-soundtrack.py",
+    "grunge:render": "node scripts/render.mjs --src src/grunge-titles.html --audio output/grunge-soundtrack.wav --out output/grunge-titles.mp4"
   },
   "devDependencies": {
     "playwright": "1.56.1"

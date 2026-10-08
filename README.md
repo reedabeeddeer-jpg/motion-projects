@@ -27,3 +27,15 @@ npm run render   # out/logo-reveal.mp4
 ```
 
 النصوص قابلة للتعديل من `defaultProps` في `src/Root.tsx`. لاستخدام Chromium مثبت مسبقاً بدل التنزيل: اضبط `REMOTION_BROWSER` على مسار المتصفح.
+
+## grunge-titles
+
+عناوين بأسلوب قصاصات الورق الممزق (Grunge Collage): محمد أبوالقاسم رائد / علي حسين / محسن حسين. 1920×1080، 30fps، 15 ثانية.
+
+```bash
+npm install
+npm run grunge:audio    # output/grunge-soundtrack.wav
+npm run grunge:render   # output/grunge-titles.mp4
+```
+
+الأسماء قابلة للتعديل من مصفوفة `TITLES` في `src/grunge-titles.html` (النص، الحجم، لون الورقة، الملصقات).

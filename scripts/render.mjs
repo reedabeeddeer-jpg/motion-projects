@@ -1,5 +1,5 @@
 // Renders src/motion.html frame-by-frame with headless Chromium and encodes an MP4 with ffmpeg.
-// Usage: node scripts/render.mjs [--fps 30] [--out output/motion.mp4] [--preview]
+// Usage: node scripts/render.mjs [--src src/motion.html] [--fps 30] [--out output/motion.mp4] [--preview]
 import { chromium } from "playwright";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -10,13 +10,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : def; };
 const fps = Number(opt("--fps", 30));
+const src = opt("--src", "src/motion.html");
 const out = path.resolve(root, opt("--out", "output/motion.mp4"));
 const audio = path.resolve(root, opt("--audio", "output/soundtrack.wav"));
 fs.mkdirSync(path.dirname(out), { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
-await page.goto(pathToFileURL(path.join(root, "src/motion.html")).href);
+await page.goto(pathToFileURL(path.join(root, src)).href);
 await page.evaluate(() => window.ready);
 const duration = await page.evaluate(() => window.DURATION);
 const frames = Math.round(duration * fps);
