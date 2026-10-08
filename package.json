@@ -5,7 +5,10 @@
   "scripts": {
     "audio": "python3 scripts/soundtrack.py",
     "preview": "node scripts/render.mjs --preview",
-    "render": "node scripts/render.mjs"
+    "render": "node scripts/render.mjs",
+    "cyber:audio": "python3 scripts/cyber_soundtrack.py",
+    "cyber:preview": "node scripts/render.mjs --src src/cyber.html --preview",
+    "cyber:render": "node scripts/render.mjs --src src/cyber.html --audio output/cyber-soundtrack.wav --out output/cyber.mp4"
   },
   "devDependencies": {
     "playwright": "1.56.1"

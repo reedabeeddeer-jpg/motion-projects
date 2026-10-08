@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Cyber Security Infographic</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #050A14; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 22;
+const C = {
+  bg: "#050A14", card: "#0C1626", line: "#163049", white: "#EAF6FF", muted: "#7C93AD",
+  green: "#00F5A0", cyan: "#22D3EE", red: "#FF3B5C", amber: "#FFB020",
+};
+// scene boundaries; glitch transitions sit on each cut
+const CUTS = [3.8, 8.6, 13.6, 18.8];
+const cv = document.getElementById("c");
+const ctx = cv.getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eOutBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const font = (w, s) => `${w} ${s}px Cairo`;
+const MONO = s => `700 ${s}px "DejaVu Sans Mono", monospace`;
+
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+
+function arabicText(str, x, y, opts = {}) {
+  ctx.save();
+  ctx.direction = "rtl";
+  ctx.font = opts.font || font(700, 60);
+  ctx.textAlign = opts.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = opts.color || C.white;
+  ctx.globalAlpha *= opts.alpha ?? 1;
+  if (opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = 30; }
+  fitFont(str, opts.maxWidth);
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// shrink the current font until str fits maxWidth
+function fitFont(str, maxWidth) {
+  if (!maxWidth) return;
+  const w = ctx.measureText(str).width;
+  if (w <= maxWidth) return;
+  ctx.font = ctx.font.replace(/(\d+(\.\d+)?)px/, (_, n) => `${(parseFloat(n) * maxWidth / w).toFixed(1)}px`);
+}
+
+function latinText(str, x, y, opts = {}) {
+  ctx.save();
+  ctx.direction = "ltr";
+  ctx.font = opts.font || font(900, 60);
+  ctx.textAlign = opts.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = opts.color || C.white;
+  ctx.globalAlpha *= opts.alpha ?? 1;
+  if (opts.spacing) ctx.letterSpacing = `${opts.spacing}px`;
+  if (opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = 30; }
+  fitFont(str, opts.maxWidth);
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// alpha for a scene that lives in [a, b]: quick fade at both ends
+const sceneAlpha = (t, a, b) => clamp(Math.min(prog(t, a, 0.3), 1 - prog(t, b - 0.3, 0.3)));
+
+// ---------- background ----------
+const rain = (() => {
+  const r = rng(11); const out = [];
+  for (let i = 0; i < 48; i++) {
+    const chars = []; for (let j = 0; j < 22; j++) chars.push(r() > 0.5 ? "1" : "0");
+    out.push({ x: 20 + i * 40, y: r() * H, v: 40 + r() * 90, chars, a: 0.05 + r() * 0.08 });
+  }
+  return out;
+})();
+
+const nodes = (() => {
+  const r = rng(29); const out = [];
+  for (let i = 0; i < 34; i++) out.push({ x: r() * W, y: r() * H, p: r() * 6.28, s: 0.2 + r() * 0.4 });
+  return out;
+})();
+
+function drawBackground(t) {
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const g = ctx.createRadialGradient(CX, CY, 40, CX, CY, 1150);
+  g.addColorStop(0, "rgba(34,211,238,0.14)");
+  g.addColorStop(0.5, "rgba(0,245,160,0.035)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // perspective-free grid
+  ctx.save();
+  ctx.strokeStyle = "rgba(34,211,238,0.06)";
+  ctx.lineWidth = 1;
+  const step = 60, off = (t * 12) % step;
+  ctx.beginPath();
+  for (let x = -step + off; x < W + step; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = -step + off; y < H + step; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  ctx.restore();
+
+  // binary rain
+  ctx.save();
+  ctx.font = MONO(20);
+  ctx.textAlign = "center";
+  for (const col of rain) {
+    const y0 = ((col.y + t * col.v) % (H + 600)) - 600;
+    col.chars.forEach((ch, j) => {
+      const flick = Math.floor(t * 8 + j * 3 + col.x) % 7 === 0 ? (ch === "1" ? "0" : "1") : ch;
+      ctx.fillStyle = `rgba(0,245,160,${col.a * (j / col.chars.length)})`;
+      ctx.fillText(flick, col.x, y0 + j * 26);
+    });
+  }
+  ctx.restore();
+
+  // network nodes with links
+  ctx.save();
+  const pts = nodes.map(n => ({ x: n.x + Math.sin(t * n.s + n.p) * 30, y: n.y + Math.cos(t * n.s * 0.8 + n.p) * 24 }));
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+      if (d < 260) {
+        ctx.strokeStyle = `rgba(34,211,238,${0.1 * (1 - d / 260)})`;
+        ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[j].x, pts[j].y); ctx.stroke();
+      }
+    }
+  }
+  pts.forEach((p, i) => {
+    ctx.fillStyle = `rgba(34,211,238,${0.25 + 0.2 * Math.sin(t * 2 + i)})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.restore();
+
+  // scanning line
+  const sy = ((t * 260) % (H + 300)) - 150;
+  const sg = ctx.createLinearGradient(0, sy - 120, 0, sy);
+  sg.addColorStop(0, "rgba(0,245,160,0)");
+  sg.addColorStop(1, "rgba(0,245,160,0.07)");
+  ctx.fillStyle = sg;
+  ctx.fillRect(0, sy - 120, W, 120);
+  ctx.fillStyle = "rgba(0,245,160,0.18)";
+  ctx.fillRect(0, sy, W, 2);
+}
+
+// HUD corner brackets + terminal log, always on top
+const LOG = [
+  [0.4, "> init secure_session"], [1.4, "> encrypting channel ... OK"],
+  [4.2, "> scanning network traffic"], [6.0, "> anomalies detected: 3"],
+  [9.0, "> threat_db: loaded"], [11.2, "> quarantine: active"],
+  [14.0, "> applying security policy"], [16.6, "> 2FA: enabled"],
+  [19.2, "> status: PROTECTED"],
+];
+function drawHUD(t) {
+  ctx.save();
+  ctx.strokeStyle = "rgba(0,245,160,0.45)";
+  ctx.lineWidth = 3;
+  const m = 44, l = 60;
+  [[m, m, 1, 1], [W - m, m, -1, 1], [W - m, H - m, -1, -1], [m, H - m, 1, -1]].forEach(([x, y, sx, sy]) => {
+    ctx.beginPath(); ctx.moveTo(x, y + sy * l); ctx.lineTo(x, y); ctx.lineTo(x + sx * l, y); ctx.stroke();
+  });
+
+  // terminal log bottom-left (latin, LTR)
+  const shown = LOG.filter(([at]) => t >= at).slice(-3);
+  ctx.font = MONO(18);
+  ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.direction = "ltr";
+  shown.forEach(([at, line], i) => {
+    const n = Math.floor(clamp((t - at) / 0.5) * line.length);
+    const last = i === shown.length - 1;
+    ctx.fillStyle = last ? "rgba(0,245,160,0.85)" : "rgba(0,245,160,0.4)";
+    const txt = line.slice(0, n) + (last && Math.floor(t * 3) % 2 === 0 ? "_" : "");
+    ctx.fillText(txt, 80, H - 140 + i * 28);
+  });
+
+  // REC-like status top-left
+  ctx.fillStyle = Math.floor(t * 2) % 2 ? C.red : "rgba(255,59,92,0.4)";
+  ctx.beginPath(); ctx.arc(92, 92, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(234,246,255,0.55)";
+  ctx.fillText(`SEC-MONITOR  ${String(Math.floor(t)).padStart(2, "0")}:${String(Math.floor((t % 1) * 30)).padStart(2, "0")}`, 110, 93);
+  ctx.restore();
+}
+
+// ---------- shapes ----------
+// shield outline as a sampled closed polyline (unit size), starting at the top centre
+const SHIELD = (() => {
+  const pts = [];
+  const quad = (p0, p1, p2, n) => { for (let i = 1; i <= n; i++) { const k = i / n, a = (1 - k) * (1 - k), b = 2 * (1 - k) * k, c = k * k; pts.push([a * p0[0] + b * p1[0] + c * p2[0], a * p0[1] + b * p1[1] + c * p2[1]]); } };
+  const line = (p0, p1, n) => { for (let i = 1; i <= n; i++) { const k = i / n; pts.push([lerp(p0[0], p1[0], k), lerp(p0[1], p1[1], k)]); } };
+  pts.push([0, -1]);
+  quad([0, -1], [0.42, -0.72], [0.86, -0.74], 30);
+  line([0.86, -0.74], [0.86, 0.02], 30);
+  quad([0.86, 0.02], [0.82, 0.64], [0, 1.06], 40);
+  quad([0, 1.06], [-0.82, 0.64], [-0.86, 0.02], 40);
+  line([-0.86, 0.02], [-0.86, -0.74], 30);
+  quad([-0.86, -0.74], [-0.42, -0.72], [0, -1], 30);
+  return pts;
+})();
+
+function shieldPath(s, frac = 1) {
+  const n = Math.max(2, Math.floor(SHIELD.length * frac));
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) { const [x, y] = SHIELD[i]; i ? ctx.lineTo(x * s, y * s) : ctx.moveTo(x * s, y * s); }
+  if (frac >= 1) ctx.closePath();
+}
+
+// padlock centred at origin; shut in [0..1] lowers the shackle
+function padlock(s, color, shut = 1, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.strokeStyle = color; ctx.fillStyle = color;
+  ctx.lineWidth = s * 0.13; ctx.lineCap = "round";
+  const lift = (1 - shut) * s * 0.35;
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.32, -s * 0.05 - lift);
+  ctx.lineTo(-s * 0.32, -s * 0.35 - lift);
+  ctx.arc(0, -s * 0.35 - lift, s * 0.32, Math.PI, 0);
+  ctx.lineTo(s * 0.32, -s * 0.05 - lift - Math.max(0, 1 - shut) * s * 0.2);
+  ctx.stroke();
+  roundRect(-s * 0.5, -s * 0.08, s, s * 0.78, s * 0.14); ctx.fill();
+  ctx.fillStyle = C.bg;
+  ctx.beginPath(); ctx.arc(0, s * 0.24, s * 0.1, 0, Math.PI * 2); ctx.fill();
+  roundRect(-s * 0.04, s * 0.26, s * 0.08, s * 0.22, s * 0.04); ctx.fill();
+  ctx.restore();
+}
+
+function glowStroke(color, blur = 24) { ctx.shadowColor = color; ctx.shadowBlur = blur; ctx.strokeStyle = color; }
+
+function checkMark(s, k, color) {
+  if (k <= 0) return;
+  const p = [[-0.45 * s, 0], [-0.12 * s, 0.32 * s], [0.5 * s, -0.35 * s]];
+  const l1 = Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]);
+  const l2 = Math.hypot(p[2][0] - p[1][0], p[2][1] - p[1][1]);
+  const d = k * (l1 + l2);
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = s * 0.18; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(...p[0]);
+  if (d <= l1) ctx.lineTo(lerp(p[0][0], p[1][0], d / l1), lerp(p[0][1], p[1][1], d / l1));
+  else { ctx.lineTo(...p[1]); const k2 = (d - l1) / l2; ctx.lineTo(lerp(p[1][0], p[2][0], k2), lerp(p[1][1], p[2][1], k2)); }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- threat icons (centred, ~120px) ----------
+function iconPhishing(t, c) {
+  ctx.save();
+  ctx.strokeStyle = c; ctx.lineWidth = 7; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  roundRect(-58, -30, 116, 78, 10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-58, -26); ctx.lineTo(0, 18); ctx.lineTo(58, -26); ctx.stroke();
+  // swinging hook
+  ctx.translate(30, -96);
+  ctx.rotate(Math.sin(t * 3) * 0.25);
+  ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, 34); ctx.arc(-12, 34, 12, 0, Math.PI); ctx.lineTo(-24, 26); ctx.stroke();
+  ctx.restore();
+}
+function iconRansom(t, c) {
+  ctx.save();
+  ctx.strokeStyle = c; ctx.lineWidth = 7; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-48, -70); ctx.lineTo(18, -70); ctx.lineTo(48, -40); ctx.lineTo(48, 70); ctx.lineTo(-48, 70); ctx.closePath(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(18, -70); ctx.lineTo(18, -40); ctx.lineTo(48, -40); ctx.stroke();
+  [-28, -8, 12].forEach(y => { ctx.beginPath(); ctx.moveTo(-28, y); ctx.lineTo(10, y); ctx.stroke(); });
+  ctx.translate(36, 52);
+  ctx.fillStyle = C.bg; ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.fill();
+  padlock(52 + Math.sin(t * 6) * 3, c);
+  ctx.restore();
+}
+function iconBug(t, c) {
+  ctx.save();
+  ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 7; ctx.lineCap = "round";
+  for (let i = -1; i <= 1; i++) {
+    const w = Math.sin(t * 10 + i) * 8;
+    ctx.beginPath(); ctx.moveTo(-30, i * 26); ctx.lineTo(-64, i * 26 + i * 14 + w); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(30, i * 26); ctx.lineTo(64, i * 26 + i * 14 - w); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.ellipse(0, 10, 36, 54, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, -52, 22, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-10, -70); ctx.lineTo(-24, -94); ctx.moveTo(10, -70); ctx.lineTo(24, -94); ctx.stroke();
+  ctx.strokeStyle = C.bg; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(0, 60); ctx.stroke();
+  ctx.restore();
+}
+function iconPassword(t, c) {
+  ctx.save();
+  ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 7;
+  roundRect(-80, -34, 160, 68, 16); ctx.stroke();
+  for (let i = 0; i < 4; i++) {
+    const on = (Math.floor(t * 4) % 6) > i;
+    ctx.globalAlpha = on ? 1 : 0.25;
+    ctx.beginPath(); ctx.arc(-48 + i * 32, 0, 9, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // crack across the field
+  ctx.lineWidth = 5; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(28, -60); ctx.lineTo(14, -22); ctx.lineTo(34, 4); ctx.lineTo(18, 60); ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- glitch transition ----------
+function glitch(t, at) {
+  const k = prog(t, at - 0.18, 0.36);
+  if (k <= 0 || k >= 1) return;
+  const amt = Math.sin(k * Math.PI);
+  const r = rng(Math.floor(t * 30) * 97 + 13);
+  for (let i = 0; i < 14; i++) {
+    const y = r() * H, h = 8 + r() * 70, dx = (r() - 0.5) * 220 * amt;
+    ctx.drawImage(cv, 0, y, W, h, dx, y, W, h);
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = [C.red, C.cyan, C.green][i % 3];
+    ctx.globalAlpha = 0.25 * amt;
+    ctx.fillRect(0, r() * H, W, 2 + r() * 10);
+  }
+  ctx.restore();
+  ctx.fillStyle = `rgba(234,246,255,${0.12 * amt})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ---------- scene 1: shield intro (0 - 3.8) ----------
+function scene1(t) {
+  const [a, b] = [0, CUTS[0]];
+  if (t > b) return;
+  const al = clamp(1 - prog(t, b - 0.3, 0.3));
+  ctx.save();
+  ctx.globalAlpha = al;
+
+  const sy = 400;
+  const kDraw = eInOutCubic(prog(t, 0.2, 1.2));
+  const kFill = eOutCubic(prog(t, 1.2, 0.6));
+  const pulse = 1 + Math.sin(t * 3) * 0.015;
+  ctx.save();
+  ctx.translate(CX, sy);
+  ctx.scale(pulse, pulse);
+  // outer pulse rings
+  for (let i = 0; i < 3; i++) {
+    const k = ((t - 1.3 + i * 0.6) % 1.8) / 1.8;
+    if (t > 1.3 && k > 0) {
+      ctx.save(); ctx.globalAlpha *= (1 - k) * 0.5; ctx.lineWidth = 3; ctx.strokeStyle = C.cyan;
+      shieldPath(230 + k * 160); ctx.stroke(); ctx.restore();
+    }
+  }
+  if (kFill > 0) {
+    ctx.save();
+    const fg = ctx.createLinearGradient(0, -230, 0, 230);
+    fg.addColorStop(0, "rgba(0,245,160,0.28)"); fg.addColorStop(1, "rgba(34,211,238,0.06)");
+    ctx.fillStyle = fg; ctx.globalAlpha *= kFill;
+    shieldPath(230); ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();
+  glowStroke(C.green, 30); ctx.lineWidth = 9; ctx.lineJoin = "round";
+  shieldPath(230, kDraw); ctx.stroke();
+  ctx.restore();
+  // inner shield line
+  if (kFill > 0) {
+    ctx.save(); ctx.globalAlpha *= kFill * 0.5; ctx.strokeStyle = C.cyan; ctx.lineWidth = 3;
+    shieldPath(190); ctx.stroke(); ctx.restore();
+  }
+  // padlock drops in and snaps shut
+  const kLock = eOutBack(prog(t, 1.35, 0.5));
+  if (kLock > 0) {
+    ctx.save();
+    ctx.translate(0, 10 + (1 - kLock) * -60);
+    ctx.globalAlpha *= clamp(kLock);
+    ctx.shadowColor = C.green; ctx.shadowBlur = 30;
+    padlock(170, C.green, eOutBack(prog(t, 1.9, 0.3)));
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // title with clip reveal
+  const kt = eOutExpo(prog(t, 1.9, 0.9));
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 680, W, 150); ctx.clip();
+  arabicText("الأمن السيبراني", CX, 755 + (1 - kt) * 150, { font: font(900, 116), glow: "rgba(0,245,160,0.6)" });
+  ctx.restore();
+
+  // typed subtitle
+  const sub = "احمِ عالمك الرقمي";
+  const ks = prog(t, 2.5, 0.8);
+  if (ks > 0) {
+    const n = Math.ceil(ks * sub.length);
+    arabicText(sub, CX, 870, { font: font(700, 46), color: C.cyan, alpha: 0 });
+    arabicText(sub.slice(0, n), CX, 870, { font: font(700, 46), color: C.cyan });
+  }
+  const kl = eOutCubic(prog(t, 2.4, 0.7));
+  if (kl > 0) {
+    ctx.fillStyle = C.green;
+    roundRect(CX - 300 * kl, 930, 600 * kl, 4, 2); ctx.fill();
+  }
+  latinText("CYBER SECURITY", CX, 975, { font: font(700, 26), color: C.muted, spacing: lerp(30, 12, kl), alpha: kl });
+  ctx.restore();
+}
+
+// ---------- scene 2: stats (3.8 - 8.6) ----------
+const STATS = [
+  { value: 39, dec: 0, prefix: "", suffix: "", unit: "ثانية", label: "بين كل هجوم إلكتروني وآخر", color: C.cyan, ring: 0.65 },
+  { value: 95, dec: 0, prefix: "", suffix: "%", unit: "من الاختراقات", label: "سببها الأساسي خطأ بشري", color: C.amber, ring: 0.95 },
+  { value: 10.5, dec: 1, prefix: "$", suffix: "T", unit: "تريليون دولار", label: "تكلفة الجرائم الإلكترونية سنوياً", color: C.red, ring: 0.8 },
+];
+function scene2(t) {
+  const [a, b] = [CUTS[0], CUTS[1]];
+  if (t < a || t > b) return;
+  ctx.save();
+  ctx.globalAlpha = sceneAlpha(t, a, b);
+
+  const kh = eOutExpo(prog(t, a + 0.1, 0.8));
+  arabicText("أرقام مقلقة", CX, 170 - (1 - kh) * 60, { font: font(900, 78), alpha: kh });
+  ctx.fillStyle = C.green; ctx.globalAlpha *= 1;
+  roundRect(CX - 70 * kh, 228, 140 * kh, 5, 3); ctx.fill();
+
+  // RTL order: first stat on the right
+  STATS.forEach((s, i) => {
+    const x = CX + (1 - i) * 560, y = 540;
+    const st = a + 0.4 + i * 0.3;
+    const kIn = eOutBack(prog(t, st, 0.7));
+    if (kIn <= 0) return;
+    const kC = eOutCubic(prog(t, st + 0.2, 1.6));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha *= clamp(kIn);
+    ctx.scale(kIn, kIn);
+
+    // gauge ring
+    ctx.lineWidth = 16; ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(234,246,255,0.08)";
+    ctx.beginPath(); ctx.arc(0, 0, 170, 0, Math.PI * 2); ctx.stroke();
+    ctx.save(); glowStroke(s.color, 20);
+    ctx.beginPath(); ctx.arc(0, 0, 170, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * s.ring * kC); ctx.stroke();
+    ctx.restore();
+    // ticks
+    ctx.save(); ctx.rotate(t * 0.3 * (i % 2 ? -1 : 1));
+    ctx.strokeStyle = "rgba(234,246,255,0.18)"; ctx.lineWidth = 3; ctx.setLineDash([3, 14]);
+    ctx.beginPath(); ctx.arc(0, 0, 205, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+
+    const num = (s.value * kC).toFixed(s.dec);
+    latinText(`${s.prefix}${num}${s.suffix}`, 0, -12, { font: font(900, 104), color: s.color, glow: s.color, maxWidth: 270 });
+    arabicText(s.unit, 0, 72, { font: font(700, 34), color: C.white });
+
+    arabicText(s.label, 0, 270, { font: font(700, 34), color: C.muted, alpha: eOutCubic(prog(t, st + 0.5, 0.6)) });
+    ctx.restore();
+  });
+
+  const kn = eOutCubic(prog(t, a + 2.0, 0.6));
+  arabicText("* أرقام تقديرية شائعة الاستخدام في تقارير الأمن السيبراني", CX, 935, { font: font(400, 24), color: C.muted, alpha: kn * 0.7 });
+  ctx.restore();
+}
+
+// ---------- scene 3: threats (8.6 - 13.6) ----------
+const THREATS = [
+  { title: "التصيّد الاحتيالي", desc: "رسائل مزيّفة لسرقة بياناتك", icon: iconPhishing, color: C.red },
+  { title: "برامج الفدية", desc: "تشفّر ملفاتك وتطلب فدية", icon: iconRansom, color: C.amber },
+  { title: "البرمجيات الخبيثة", desc: "فيروسات تتسلّل إلى أجهزتك", icon: iconBug, color: C.red },
+  { title: "كلمات مرور ضعيفة", desc: "أسهل باب يدخل منه المخترقون", icon: iconPassword, color: C.amber },
+];
+function scene3(t) {
+  const [a, b] = [CUTS[1], CUTS[2]];
+  if (t < a || t > b) return;
+  ctx.save();
+  ctx.globalAlpha = sceneAlpha(t, a, b);
+
+  const kh = eOutExpo(prog(t, a + 0.1, 0.8));
+  // warning badge next to heading
+  ctx.save();
+  ctx.translate(CX + 260, 170);
+  ctx.scale(kh, kh);
+  ctx.fillStyle = C.red;
+  ctx.globalAlpha *= 0.7 + 0.3 * Math.sin(t * 8);
+  ctx.beginPath(); ctx.moveTo(0, -36); ctx.lineTo(38, 30); ctx.lineTo(-38, 30); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = C.bg;
+  roundRect(-4, -14, 8, 26, 4); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 21, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  arabicText("أبرز التهديدات", CX - 40, 170, { font: font(900, 78), alpha: kh });
+
+  const cw = 380, ch = 520, gap = 40;
+  const total = THREATS.length * cw + (THREATS.length - 1) * gap;
+  THREATS.forEach((th, i) => {
+    const x = CX + total / 2 - cw / 2 - i * (cw + gap), y = 600;
+    const st = a + 0.35 + i * 0.22;
+    const k = eOutCubic(prog(t, st, 0.7));
+    if (k <= 0) return;
+    ctx.save();
+    ctx.translate(x, y + (1 - k) * 160);
+    ctx.globalAlpha *= k;
+
+    ctx.fillStyle = C.card;
+    roundRect(-cw / 2, -ch / 2, cw, ch, 28); ctx.fill();
+    ctx.strokeStyle = th.color; ctx.globalAlpha *= 0.55 + 0.25 * Math.sin(t * 4 + i);
+    ctx.lineWidth = 2.5; roundRect(-cw / 2, -ch / 2, cw, ch, 28); ctx.stroke();
+    ctx.globalAlpha = k;
+    // top accent bar
+    ctx.fillStyle = th.color;
+    roundRect(-cw / 2 + 40, -ch / 2, (cw - 80) * eOutCubic(prog(t, st + 0.3, 0.6)), 6, 3); ctx.fill();
+
+    latinText(`0${i + 1}`, cw / 2 - 60, -ch / 2 + 56, { font: font(900, 40), color: "rgba(234,246,255,0.12)" });
+
+    // icon disc
+    const ki = eOutBack(prog(t, st + 0.25, 0.6));
+    ctx.save();
+    ctx.translate(0, -70);
+    ctx.fillStyle = th.color === C.red ? "rgba(255,59,92,0.1)" : "rgba(255,176,32,0.1)";
+    ctx.beginPath(); ctx.arc(0, 0, 120 * ki, 0, Math.PI * 2); ctx.fill();
+    ctx.scale(ki, ki);
+    ctx.shadowColor = th.color; ctx.shadowBlur = 18;
+    th.icon(t, th.color);
+    ctx.restore();
+
+    arabicText(th.title, 0, 120, { font: font(900, 44), maxWidth: cw - 50 });
+    const kd = eOutCubic(prog(t, st + 0.5, 0.6));
+    arabicText(th.desc, 0, 182, { font: font(400, 27), color: C.muted, alpha: kd, maxWidth: cw - 50 });
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ---------- scene 4: protection tips (13.6 - 18.8) ----------
+const TIPS = [
+  "استخدم كلمات مرور قوية ومختلفة",
+  "فعّل المصادقة الثنائية (2FA)",
+  "حدّث أنظمتك وتطبيقاتك باستمرار",
+  "لا تفتح الروابط والمرفقات المشبوهة",
+];
+function scene4(t) {
+  const [a, b] = [CUTS[2], CUTS[3]];
+  if (t < a || t > b) return;
+  ctx.save();
+  ctx.globalAlpha = sceneAlpha(t, a, b);
+
+  const kh = eOutExpo(prog(t, a + 0.1, 0.8));
+  arabicText("كيف تحمي نفسك؟", W - 200, 190, { font: font(900, 80), align: "right", alpha: kh });
+  ctx.fillStyle = C.green;
+  roundRect(W - 200 - 160 * kh, 250, 160 * kh, 5, 3); ctx.fill();
+
+  // checklist on the right (RTL)
+  const rowX = W - 200;
+  let done = 0;
+  TIPS.forEach((tip, i) => {
+    const y = 380 + i * 135;
+    const st = a + 0.5 + i * 0.6;
+    const k = eOutCubic(prog(t, st, 0.5));
+    if (k <= 0) return;
+    const kc = prog(t, st + 0.35, 0.35);
+    if (kc >= 1) done++;
+    ctx.save();
+    ctx.globalAlpha *= k;
+    ctx.translate((1 - k) * 120, 0);
+    // row card
+    ctx.fillStyle = C.card;
+    roundRect(rowX - 960, y - 52, 960, 104, 22); ctx.fill();
+    ctx.strokeStyle = kc >= 1 ? "rgba(0,245,160,0.5)" : C.line; ctx.lineWidth = 2;
+    roundRect(rowX - 960, y - 52, 960, 104, 22); ctx.stroke();
+    // check box
+    const bx = rowX - 62;
+    ctx.save();
+    ctx.translate(bx, y);
+    const kb = eOutBack(kc);
+    ctx.fillStyle = kc > 0 ? `rgba(0,245,160,${0.18 * kb})` : "transparent";
+    roundRect(-30, -30, 60, 60, 14); ctx.fill();
+    ctx.strokeStyle = kc > 0 ? C.green : C.muted; ctx.lineWidth = 4;
+    roundRect(-30, -30, 60, 60, 14); ctx.stroke();
+    checkMark(34, eOutCubic(kc), C.green);
+    ctx.restore();
+    arabicText(tip, rowX - 120, y + 2, { font: font(700, 42), align: "right" });
+    ctx.restore();
+  });
+
+  // security level gauge on the left
+  const gx = 470, gy = 600;
+  const kg = eOutBack(prog(t, a + 0.3, 0.7));
+  if (kg > 0) {
+    // level eases toward the number of completed tips
+    const target = TIPS.reduce((s, _, i) => s + eInOutCubic(prog(t, a + 0.85 + i * 0.6, 0.5)), 0) / TIPS.length;
+    const lvl = target;
+    const col = lvl < 0.5 ? C.red : lvl < 0.99 ? C.amber : C.green;
+    ctx.save();
+    ctx.translate(gx, gy);
+    ctx.scale(kg, kg);
+    ctx.globalAlpha *= clamp(kg);
+    const start = Math.PI * 0.75, span = Math.PI * 1.5;
+    ctx.lineCap = "round"; ctx.lineWidth = 34;
+    ctx.strokeStyle = "rgba(234,246,255,0.08)";
+    ctx.beginPath(); ctx.arc(0, 0, 240, start, start + span); ctx.stroke();
+    // segmented colour band
+    const grad = ctx.createConicGradient(start, 0, 0);
+    grad.addColorStop(0, C.red); grad.addColorStop(0.4, C.amber); grad.addColorStop(0.75, C.green); grad.addColorStop(1, C.green);
+    ctx.save(); ctx.strokeStyle = grad; ctx.shadowColor = col; ctx.shadowBlur = 24;
+    if (lvl > 0.001) { ctx.beginPath(); ctx.arc(0, 0, 240, start, start + span * lvl); ctx.stroke(); }
+    ctx.restore();
+    // knob riding the arc end
+    const ang = start + span * lvl;
+    ctx.fillStyle = C.white; ctx.shadowColor = col; ctx.shadowBlur = 20;
+    ctx.beginPath(); ctx.arc(Math.cos(ang) * 240, Math.sin(ang) * 240, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    // padlock snaps shut as the level reaches 100%
+    ctx.save(); ctx.translate(0, -60);
+    padlock(90, col, clamp((lvl - 0.9) * 10), 0.95);
+    ctx.restore();
+    latinText(`${Math.round(lvl * 100)}%`, 0, 90, { font: font(900, 96), color: col, glow: col });
+    arabicText("مستوى الأمان", 0, 215, { font: font(700, 38), color: C.muted });
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------- scene 5: outro (18.8 - 22) ----------
+function scene5(t) {
+  const a = CUTS[3];
+  if (t < a) return;
+  ctx.save();
+  ctx.globalAlpha = clamp(prog(t, a, 0.3));
+
+  const k = eOutBack(prog(t, a + 0.1, 0.8));
+  // radial burst
+  const kb = prog(t, a + 0.3, 1.2);
+  if (kb > 0 && kb < 1) {
+    ctx.save();
+    ctx.translate(CX, 400);
+    ctx.globalAlpha *= 1 - kb;
+    ctx.strokeStyle = C.green; ctx.lineWidth = 4; ctx.lineCap = "round";
+    for (let i = 0; i < 24; i++) {
+      const ang = i / 24 * Math.PI * 2, r0 = 240 + eOutCubic(kb) * 200, r1 = r0 + 60 * (1 - kb);
+      ctx.beginPath(); ctx.moveTo(Math.cos(ang) * r0, Math.sin(ang) * r0); ctx.lineTo(Math.cos(ang) * r1, Math.sin(ang) * r1); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (k > 0) {
+    ctx.save();
+    ctx.translate(CX, 400);
+    ctx.scale(k, k);
+    ctx.rotate((1 - clamp(k)) * -0.6);
+    const fg = ctx.createLinearGradient(0, -200, 0, 200);
+    fg.addColorStop(0, "rgba(0,245,160,0.35)"); fg.addColorStop(1, "rgba(34,211,238,0.08)");
+    ctx.fillStyle = fg; shieldPath(200); ctx.fill();
+    ctx.save(); glowStroke(C.green, 34); ctx.lineWidth = 9; ctx.lineJoin = "round"; shieldPath(200); ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.shadowColor = C.green; ctx.shadowBlur = 24;
+    checkMark(170, eOutCubic(prog(t, a + 0.6, 0.5)), C.white);
+    ctx.restore();
+    ctx.restore();
+  }
+
+  const kt = eOutExpo(prog(t, a + 0.7, 0.9));
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 650, W, 150); ctx.clip();
+  arabicText("أمانك الرقمي يبدأ منك", CX, 725 + (1 - kt) * 150, { font: font(900, 100), glow: "rgba(0,245,160,0.5)" });
+  ctx.restore();
+
+  const ks = eOutCubic(prog(t, a + 1.2, 1.0));
+  if (ks > 0) {
+    ctx.fillStyle = C.red;
+    roundRect(CX - 330 - 140 * ks, 852, 140 * ks, 4, 2); ctx.fill();
+    ctx.fillStyle = C.green;
+    roundRect(CX + 330, 852, 140 * ks, 4, 2); ctx.fill();
+    latinText("STAY  SAFE  ONLINE", CX, 853, { font: font(700, 32), color: C.cyan, spacing: lerp(40, 14, ks), alpha: ks });
+  }
+  ctx.restore();
+}
+
+// ---------- master ----------
+function render(t) {
+  ctx.save();
+  drawBackground(t);
+  scene1(t);
+  scene2(t);
+  scene3(t);
+  scene4(t);
+  scene5(t);
+  drawHUD(t);
+  CUTS.forEach(c => glitch(t, c));
+  // vignette
+  const v = ctx.createRadialGradient(CX, CY, 500, CX, CY, 1150);
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  const fadeIn = 1 - prog(t, 0, 0.25);
+  const fadeOut = prog(t, DURATION - 0.8, 0.8);
+  const f = Math.max(fadeIn, fadeOut);
+  if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
+window.DURATION = DURATION;
+window.PREVIEW_TIMES = [1.0, 2.6, 3.8, 6.5, 11.5, 15.0, 18.3, 21.0];
+window.render = render;
+window.ready = Promise.all([400, 700, 900].flatMap(w => [
+  document.fonts.load(`${w} 50px Cairo`, "أمن"),
+  document.fonts.load(`${w} 50px Cairo`, "ABC"),
+])).then(() => true);
+
+// live preview when opened directly in a browser
+if (!navigator.webdriver) {
+  const t0 = performance.now();
+  window.ready.then(() => {
+    const loop = now => { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>
