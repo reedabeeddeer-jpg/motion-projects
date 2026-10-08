@@ -160,30 +160,31 @@ function drawWaveform(t, e) {
 }
 
 // ---------- synced text ----------
-// word start times come from the pauses in assets/audio/quran-voice.mp3
+// word start times are ElevenLabs Scribe timestamps of assets/audio/quran-voice.mp3
 const SCENES = [
-  { start: 0.0, end: 3.95, lines: [
-    { y: 450, font: "700 132px Amiri", gold: true, words: [["أهلُ", 0.02], ["القرآنِ", 0.45]] },
-    { y: 640, font: "700 132px Amiri", words: [["هم", 1.38], ["أهلُ", 1.62], ["اللهِ", 1.95], ["وخاصّتُه", 2.8]] },
+  { start: 0.0, end: 2.95, lines: [
+    { y: 450, font: "700 132px Amiri", gold: true, words: [["أهلُ", 0.04], ["القرآنِ", 0.26]] },
+    { y: 640, font: "700 132px Amiri", words: [["هم", 1.14], ["أهلُ", 1.42], ["اللهِ", 1.74], ["وخاصّتُه", 2.2]] },
   ] },
-  { start: 4.0, end: 8.3, lines: [
-    { y: 330, font: "700 62px Cairo", words: [["ندعوكم", 4.05], ["للمشاركةِ", 4.53], ["في", 5.3]] },
-    { y: 520, font: "700 150px Amiri", gold: true, words: [["مسابقةِ", 5.49], ["القرآنِ", 6.07], ["الكريمِ", 6.64]] },
-    { y: 720, font: "900 72px Cairo", ribbon: true, words: [["الكبرى", 7.22]] },
+  { start: 2.95, end: 6.45, lines: [
+    { y: 330, font: "700 62px Cairo", words: [["ندعوكم", 3.04], ["للمشاركةِ", 3.48], ["في", 4.16]] },
+    { y: 520, font: "700 150px Amiri", gold: true, words: [["مسابقةِ", 4.28], ["القرآنِ", 4.8], ["الكريمِ", 5.26]] },
+    { y: 720, font: "900 72px Cairo", ribbon: true, words: [["الكبرى", 5.68]] },
   ] },
-  { start: 8.3, end: 11.6, cards: [["حفظاً", 8.46, "١"], ["تلاوةً", 9.35, "٢"], ["تجويداً", 10.69, "٣"]] },
-  { start: 11.6, end: 14.85, trophy: 11.6, lines: [
-    { y: 620, font: "700 120px Amiri", gold: true, words: [["جوائزُ", 11.69], ["قيّمةٌ", 12.26]] },
-    { y: 790, font: "700 70px Cairo", words: [["بانتظارِ", 12.72], ["المتميّزين", 13.52]] },
+  { start: 6.45, end: 9.15, cards: [["حفظاً", 6.66, "١"], ["تلاوةً", 7.32, "٢"], ["تجويداً", 8.3, "٣"]] },
+  { start: 9.15, end: 11.8, trophy: 9.1, lines: [
+    { y: 620, font: "700 120px Amiri", gold: true, words: [["بجوائزَ", 9.26], ["قيّمةٍ", 9.9]] },
+    { y: 790, font: "700 70px Cairo", words: [["للمتميّزين", 10.8]] },
   ] },
-  { start: 14.85, end: 17.05, lines: [
-    { y: 440, font: "900 120px Cairo", words: [["سارعوا", 14.95], ["بالتسجيلِ", 15.53]] },
-    { y: 650, font: "900 96px Cairo", button: true, words: [["الآن", 16.3]] },
+  { start: 11.8, end: 13.4, lines: [
+    { y: 440, font: "900 120px Cairo", words: [["سارعوا", 11.94], ["بالتسجيلِ", 12.34]] },
+    { y: 650, font: "900 96px Cairo", button: true, words: [["الآن", 12.92]] },
   ] },
-  { start: 17.05, end: 20.5, quote: true, lines: [
-    { y: 330, font: "400 54px Amiri", words: [["قال", 17.05], ["رسول", 17.05], ["الله", 17.05], ["ﷺ", 17.05]], muted: true },
-    { y: 540, font: "700 140px Amiri", gold: true, words: [["خيرُكم", 17.12], ["مَن", 17.76], ["تعلّمَ", 17.97]] },
-    { y: 730, font: "700 140px Amiri", gold: true, words: [["القرآنَ", 18.5], ["وعلّمَه", 19.13]] },
+  { start: 13.4, end: 20.5, quote: true, lines: [
+    { y: 230, font: "700 70px Amiri", words: [["قال", 13.48], ["رسولُ", 13.72], ["اللهِ", 14.06]] },
+    { y: 335, font: "700 70px Amiri", gold: true, words: [["صلّى", 14.38], ["اللهُ", 14.62], ["عليهِ", 15.0], ["وآلِهِ", 15.38], ["وسلّم", 15.9]] },
+    { y: 580, font: "700 140px Amiri", gold: true, words: [["خيرُكم", 16.6], ["مَن", 17.22], ["تعلّمَ", 17.46]] },
+    { y: 770, font: "700 140px Amiri", gold: true, words: [["القرآنَ", 17.98], ["وعلّمَه", 18.86]] },
   ] },
 ];
 // each word stays "active" (highlighted) until the next word starts
@@ -191,9 +192,15 @@ const ALL_WORDS = SCENES.flatMap(s => (s.lines || []).flatMap(l => l.words).conc
   .map(w => w[1]).sort((a, b) => a - b);
 const nextStart = ws => ALL_WORDS.find(x => x > ws + 0.01) ?? DURATION;
 
-function sceneAlpha(s, t) {
-  const out = s.end >= DURATION ? 0 : prog(t, s.end - 0.35, 0.35);
-  return 1 - eInCubic(out);
+function sceneOut(s, t) {
+  return s.end >= DURATION ? 0 : eInCubic(prog(t, s.end - 0.4, 0.4));
+}
+// position + opacity entrance: slides in from the right (reading direction) and from below
+const SLIDE_X = 90, SLIDE_Y = 36;
+function enter(t, start, dur = 0.6) {
+  const p = prog(t, start, dur);
+  const k = eOutCubic(p);
+  return { p, alpha: clamp(p * 1.6), dx: (1 - k) * SLIDE_X, dy: (1 - k) * SLIDE_Y };
 }
 
 function drawLine(line, t, e, sa) {
@@ -208,11 +215,11 @@ function drawLine(line, t, e, sa) {
   let x = CX + total / 2;
 
   if (line.ribbon || line.button) {
-    const k = eOutBack(prog(t, line.words[0][1] - 0.1, 0.5));
-    const pulse = line.button ? 1 + Math.sin(Math.max(0, t - 16.6) * 7) * 0.03 * prog(t, 16.6, 0.2) : 1;
-    const pw = (total + size * 1.3) * k * pulse, ph = size * 1.45 * pulse;
+    const en = enter(t, line.words[0][1] - 0.1);
+    const pw = total + size * 1.3, ph = size * 1.45;
     ctx.save();
-    ctx.globalAlpha *= sa * clamp(k);
+    ctx.translate(en.dx, en.dy);
+    ctx.globalAlpha *= sa * en.alpha;
     ctx.shadowColor = "rgba(232,194,106,0.6)"; ctx.shadowBlur = 30 + e * 30;
     ctx.fillStyle = goldFill(line.y, size);
     ctx.beginPath(); ctx.roundRect(CX - pw / 2, line.y - ph / 2, pw, ph, ph / 2); ctx.fill();
@@ -221,17 +228,16 @@ function drawLine(line, t, e, sa) {
 
   line.words.forEach(([word, ws], i) => {
     const w = widths[i];
-    const p = prog(t, ws, 0.45);
-    if (p <= 0) { x -= w + space; return; }
-    const k = eOutBack(p);
+    const en = enter(t, ws - 0.04);
+    if (en.p <= 0) { x -= w + space; return; }
+    const pill = line.ribbon || line.button;
     const active = t >= ws && t < nextStart(ws);
     const hot = active ? 1 : 1 - prog(t, nextStart(ws), 0.3);
     const cx = x - w / 2;
     ctx.save();
-    ctx.globalAlpha = sa * clamp(p * 2.2) * (line.muted ? 0.8 : 1);
-    ctx.translate(cx, line.y + (1 - k) * 60);
-    const sc = (0.55 + 0.45 * k) * (1 + hot * e * 0.07);
-    ctx.scale(sc, sc);
+    ctx.globalAlpha = sa * en.alpha * (line.muted ? 0.85 : 1);
+    ctx.translate(cx + (pill ? enter(t, line.words[0][1] - 0.1).dx : en.dx),
+                  line.y + (pill ? enter(t, line.words[0][1] - 0.1).dy : en.dy) - hot * e * 8);
     ctx.textAlign = "center";
     if (line.ribbon || line.button) {
       ctx.fillStyle = C.emerald;
@@ -267,29 +273,26 @@ function drawDivider(y, t, start, sa, width = 520) {
 
 function drawCards(s, t, e, sa) {
   // section label (not spoken)
-  const lk = eOutCubic(prog(t, s.start, 0.5));
+  const le = enter(t, s.start);
   ctx.save();
-  ctx.globalAlpha = sa * lk;
+  ctx.globalAlpha = sa * le.alpha;
+  ctx.translate(le.dx, 0);
   ctx.font = "700 58px Cairo"; ctx.direction = "rtl"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillStyle = C.cream;
-  ctx.fillText("مجالات المسابقة", CX, 250 - (1 - lk) * 30);
+  ctx.fillText("مجالات المسابقة", CX, 250 + le.dy);
   ctx.restore();
   drawDivider(310, t, s.start + 0.1, sa, 420);
 
   const cw = 440, ch = 460, gap = 70;
   s.cards.forEach(([label, ws, num], i) => {
     const x = CX + (1 - i) * (cw + gap); // right to left
-    const p = prog(t, ws - 0.05, 0.55);
-    if (p <= 0) return;
-    const k = eOutBack(p);
+    const en = enter(t, ws - 0.1, 0.7);
+    if (en.p <= 0) return;
     const active = t >= ws && t < nextStart(ws);
     const hot = active ? 1 : 1 - prog(t, nextStart(ws), 0.3);
-    const y = 640 + (1 - k) * 160;
     ctx.save();
-    ctx.globalAlpha = sa * clamp(p * 2);
-    ctx.translate(x, y);
-    const sc = 1 + hot * e * 0.04;
-    ctx.scale(sc, sc);
+    ctx.globalAlpha = sa * en.alpha;
+    ctx.translate(x + en.dx, 640 + en.dy * 3 - hot * e * 10);
     // card
     ctx.shadowColor = `rgba(232,194,106,${0.15 + hot * 0.45})`; ctx.shadowBlur = 40;
     ctx.fillStyle = "rgba(4,40,36,0.72)";
@@ -299,7 +302,7 @@ function drawCards(s, t, e, sa) {
     ctx.stroke();
     // number badge
     ctx.fillStyle = goldFill(-90, 120);
-    star8(0, -90, 92 + hot * e * 10, t * 0.4 + i); ctx.fill();
+    star8(0, -90, 92, t * 0.4 + i); ctx.fill();
     ctx.fillStyle = C.emerald;
     ctx.font = "900 86px Cairo"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.direction = "rtl";
     ctx.fillText(num, 0, -84);
@@ -313,14 +316,11 @@ function drawCards(s, t, e, sa) {
 }
 
 function drawTrophy(t, start, e, sa) {
-  const p = prog(t, start, 0.7);
-  if (p <= 0) return;
-  const k = eOutBack(p);
+  const en = enter(t, start, 0.8);
+  if (en.p <= 0) return;
   ctx.save();
-  ctx.globalAlpha = sa * clamp(p * 2);
-  ctx.translate(CX, 330 + (1 - k) * -80);
-  const sc = k * (1 + e * 0.05);
-  ctx.scale(sc, sc);
+  ctx.globalAlpha = sa * en.alpha;
+  ctx.translate(CX, 330 - en.dy * 3 - e * 10);
   // rays
   ctx.save();
   ctx.rotate(t * 0.4);
@@ -355,24 +355,23 @@ function drawTrophy(t, start, e, sa) {
 
 function drawScene(s, t, e) {
   if (t < s.start - 0.05 || t > s.end) return;
-  const sa = sceneAlpha(s, t);
+  const out = sceneOut(s, t);
+  const sa = 1 - out;
   ctx.save();
-  // gentle push-in during the scene
-  const z = 1 + (t - s.start) * 0.008;
-  ctx.translate(CX, CY); ctx.scale(z, z); ctx.translate(-CX, -CY);
+  ctx.translate(0, -out * 70);
   if (s.cards) drawCards(s, t, e, sa);
   if (s.trophy) drawTrophy(t, s.trophy, e, sa);
   for (const line of s.lines || []) drawLine(line, t, e, sa);
-  if (s === SCENES[0]) drawDivider(790, t, 2.9, sa, 560);
-  if (s === SCENES[1]) drawDivider(410, t, 5.3, sa, 640);
+  if (s === SCENES[0]) drawDivider(790, t, 1.4, sa, 560);
+  if (s === SCENES[1]) drawDivider(410, t, 4.2, sa, 640);
   if (s.quote) {
-    drawDivider(420, t, 17.3, sa, 520);
+    drawDivider(445, t, 16.2, sa, 520);
     // light sweep across the final verse
     const p = prog(t, 19.5, 0.5);
     if (p > 0 && p < 1) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      ctx.translate(lerp(W + 300, -300, p), 635);
+      ctx.translate(lerp(W + 300, -300, p), 675);
       ctx.scale(0.6, 1.4);
       const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 260);
       g.addColorStop(0, "rgba(255,240,200,0.16)"); g.addColorStop(1, "rgba(255,240,200,0)");

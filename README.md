@@ -148,10 +148,13 @@ node scripts/render.mjs --src src/promo-set.html --audio output/promo_set_soundt
 - `src/quran.html`: الأنيميشن وتوقيت الكلمات (`SCENES`).
 - `assets/audio/quran-voice.mp3`: التعليق الصوتي.
 - `scripts/voice_envelope.py`: يولّد `src/quran-envelope.js` (شدة الصوت لكل إطار).
+- `scripts/quran_music.py`: موسيقى هادئة بلا إيقاع (درون + أصوات كورال على مقام البياتي) تنخفض تحت الصوت، ويخرج المزج في `output/quran-mix.wav`.
+- حركة النص: ظهور بالموضع والشفافية (position + opacity). توقيت الكلمات من تفريغ ElevenLabs Scribe.
 
 ```bash
 python3 scripts/voice_envelope.py
-node scripts/render.mjs --src src/quran.html --audio assets/audio/quran-voice.mp3 --out output/quran-competition.mp4
+python3 scripts/quran_music.py
+node scripts/render.mjs --src src/quran.html --audio output/quran-mix.wav --out output/quran-competition.mp4
 ```
 
 Font: Amiri (SIL OFL)، في `assets/fonts`.
