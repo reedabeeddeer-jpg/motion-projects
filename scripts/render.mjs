@@ -9,10 +9,10 @@ import fs from "node:fs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : def; };
+const src = path.resolve(root, opt("--src", "src/motion.html"));
 const fps = Number(opt("--fps", 30));
 const out = path.resolve(root, opt("--out", "output/motion.mp4"));
 const audio = path.resolve(root, opt("--audio", "output/soundtrack.wav"));
-const src = path.resolve(root, opt("--src", "src/motion.html"));
 fs.mkdirSync(path.dirname(out), { recursive: true });
 
 // file access lets pages draw local images onto the canvas without tainting it
@@ -24,7 +24,7 @@ const duration = await page.evaluate(() => window.DURATION);
 const frames = Math.round(duration * fps);
 
 if (args.includes("--preview")) {
-  const dir = path.resolve(root, opt("--stills", "output/stills"));
+  const dir = path.resolve(root, opt("--stills", path.join("output/stills", path.basename(src, ".html"))));
   fs.mkdirSync(dir, { recursive: true });
   for (const t of (opt("--times", "0.8,2,2.8,4.8,7.8,8.5,11.5")).split(",").map(Number)) {
     const png = await page.evaluate(t => { window.render(t); return document.getElementById("c").toDataURL("image/png"); }, t);
