@@ -27,3 +27,14 @@ npm run render   # out/logo-reveal.mp4
 ```
 
 النصوص قابلة للتعديل من `defaultProps` في `src/Root.tsx`. لاستخدام Chromium مثبت مسبقاً بدل التنزيل: اضبط `REMOTION_BROWSER` على مسار المتصفح.
+
+## kinetic text (10 ثوانٍ)
+
+فيديو نصوص متحركة: كل جملة تظهر بتأثير وتختفي بتأثير مختلف (glitch، انهيار، zoom، slam) ثم تظهر جملة جديدة.
+
+```bash
+python3 scripts/kinetic_audio.py   # output/kinetic.wav
+node scripts/render.mjs --src src/kinetic.html --audio output/kinetic.wav --out output/kinetic.mp4
+```
+
+الجمل وتوقيتاتها في `PHRASES` داخل `src/kinetic.html`.
