@@ -4,7 +4,8 @@
   "scripts": {
     "studio": "remotion studio",
     "render": "remotion render LogoReveal out/logo-reveal.mp4",
-    "render:text": "remotion render TextReveal out/text-reveal.mp4"
+    "render:text": "remotion render TextReveal out/text-reveal.mp4",
+    "render:bounce": "remotion render BounceText out/bounce-text.mp4"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.533",
