@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Calm Motion</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  html, body { margin: 0; background: #070B18; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 20;
+const C = {
+  bg: "#070B18", white: "#EEF3FF", muted: "#9AA8C9",
+  teal: "#5EE6D0", sky: "#6FA8FF", lilac: "#B79CFF", peach: "#FFC9A8",
+};
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eInOutSine = k => -(Math.cos(Math.PI * k) - 1) / 2;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const font = (w, s) => `${w} ${s}px Cairo`;
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+// fade in over [a, a+fi], hold, fade out over [b-fo, b]
+const window_ = (t, a, b, fi = 1.2, fo = 1.2) => eInOutSine(prog(t, a, fi)) * (1 - eInOutSine(prog(t, b - fo, fo)));
+
+function softText(str, x, y, t, a, b, opts = {}) {
+  const k = window_(t, a, b, opts.fi ?? 1.4, opts.fo ?? 1.2);
+  if (k <= 0) return;
+  const rise = (1 - eOutCubic(prog(t, a, 1.8))) * 30;
+  ctx.save();
+  ctx.direction = "rtl";
+  ctx.font = opts.font || font(700, 72);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.globalAlpha = k;
+  ctx.filter = `blur(${(1 - k) * 8}px)`;
+  ctx.shadowColor = opts.glow || "rgba(94,230,208,0.35)";
+  ctx.shadowBlur = 30;
+  ctx.fillStyle = opts.color || C.white;
+  ctx.fillText(str, x, y + rise);
+  ctx.restore();
+}
+
+// ---------- background ----------
+const bokeh = (() => {
+  const r = rng(11); const out = [];
+  const cols = [C.teal, C.sky, C.lilac, C.peach];
+  for (let i = 0; i < 38; i++) out.push({
+    x: r() * W, y: r() * H, s: 6 + r() * 26, v: 4 + r() * 10,
+    p: r() * Math.PI * 2, c: cols[i % 4], a: 0.05 + r() * 0.12,
+  });
+  return out;
+})();
+const dust = (() => {
+  const r = rng(5); const out = [];
+  for (let i = 0; i < 90; i++) out.push({ x: r() * W, y: r() * H, s: 0.8 + r() * 1.6, v: 6 + r() * 14, p: r() * 6.28 });
+  return out;
+})();
+
+function drawBackground(t) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#0A1230");
+  g.addColorStop(0.55, "#0B1A2E");
+  g.addColorStop(1, "#06121A");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // drifting colour glows
+  const glows = [
+    { c: "94,230,208", x: 0.3 + 0.08 * Math.sin(t * 0.21), y: 0.35 + 0.06 * Math.cos(t * 0.17), r: 700, a: 0.16 },
+    { c: "183,156,255", x: 0.72 + 0.07 * Math.cos(t * 0.15), y: 0.6 + 0.07 * Math.sin(t * 0.19), r: 760, a: 0.14 },
+    { c: "111,168,255", x: 0.5 + 0.1 * Math.sin(t * 0.11 + 1), y: 0.15, r: 600, a: 0.1 },
+  ];
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const gl of glows) {
+    const rg = ctx.createRadialGradient(gl.x * W, gl.y * H, 0, gl.x * W, gl.y * H, gl.r);
+    rg.addColorStop(0, `rgba(${gl.c},${gl.a})`);
+    rg.addColorStop(1, `rgba(${gl.c},0)`);
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.restore();
+
+  // aurora ribbons
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const ribbons = [
+    { y: 0.68, amp: 60, f: 0.0026, s: 0.35, c: "94,230,208", a: 0.07 },
+    { y: 0.74, amp: 80, f: 0.0019, s: -0.25, c: "111,168,255", a: 0.06 },
+    { y: 0.8, amp: 50, f: 0.0032, s: 0.2, c: "183,156,255", a: 0.06 },
+  ];
+  for (const rb of ribbons) {
+    for (let layer = 0; layer < 5; layer++) {
+      ctx.beginPath();
+      for (let x = 0; x <= W; x += 16) {
+        const y = rb.y * H + Math.sin(x * rb.f + t * rb.s + layer * 0.25) * rb.amp
+          + Math.sin(x * rb.f * 2.3 - t * rb.s * 0.7) * rb.amp * 0.35 + layer * 10;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = `rgba(${rb.c},${rb.a * (1 - layer / 5)})`;
+      ctx.lineWidth = 2 + layer * 3;
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // bokeh
+  for (const b of bokeh) {
+    const y = ((b.y - t * b.v) % H + H) % H;
+    const x = b.x + Math.sin(t * 0.3 + b.p) * 20;
+    const a = b.a * (0.6 + 0.4 * Math.sin(t * 0.8 + b.p));
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, b.s);
+    rg.addColorStop(0, b.c + Math.round(a * 255).toString(16).padStart(2, "0"));
+    rg.addColorStop(1, b.c + "00");
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.arc(x, y, b.s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const d of dust) {
+    const y = ((d.y - t * d.v) % H + H) % H;
+    ctx.fillStyle = `rgba(238,243,255,${0.12 + 0.18 * Math.sin(t * 1.2 + d.p) ** 2})`;
+    ctx.beginPath();
+    ctx.arc(d.x + Math.sin(t * 0.5 + d.p) * 8, y, d.s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ---------- breathing orb ----------
+// inhale 5→9, hold, exhale 9.5→13.5
+function breath(t) {
+  const inhale = eInOutSine(prog(t, 5, 4));
+  const exhale = eInOutSine(prog(t, 9.5, 4));
+  return inhale - exhale * 0.75;
+}
+
+function drawOrb(t) {
+  const vis = window_(t, 1.8, 16.2, 2.2, 1.8);
+  if (vis <= 0) return;
+  const b = breath(t);
+  const r = (150 + b * 140 + Math.sin(t * 0.9) * 6) * lerp(0.7, 1, vis);
+  ctx.save();
+  ctx.globalAlpha = vis;
+
+  // halo
+  const halo = ctx.createRadialGradient(CX, CY, r * 0.4, CX, CY, r * 2.4);
+  halo.addColorStop(0, "rgba(94,230,208,0.22)");
+  halo.addColorStop(0.5, "rgba(111,168,255,0.08)");
+  halo.addColorStop(1, "rgba(111,168,255,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, W, H);
+
+  // ripple rings
+  for (let i = 0; i < 4; i++) {
+    const ph = ((t * 0.18 + i / 4) % 1);
+    ctx.strokeStyle = `rgba(238,243,255,${0.16 * (1 - ph)})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(CX, CY, r + ph * 260, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // orb body: wobbly blob
+  ctx.beginPath();
+  for (let a = 0; a <= Math.PI * 2 + 0.01; a += Math.PI / 90) {
+    const w = 1 + 0.025 * Math.sin(a * 3 + t * 0.8) + 0.018 * Math.sin(a * 5 - t * 1.1);
+    const x = CX + Math.cos(a) * r * w, y = CY + Math.sin(a) * r * w;
+    a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  const body = ctx.createRadialGradient(CX - r * 0.35, CY - r * 0.4, r * 0.1, CX, CY, r * 1.05);
+  body.addColorStop(0, "rgba(238,243,255,0.55)");
+  body.addColorStop(0.35, "rgba(94,230,208,0.38)");
+  body.addColorStop(0.8, "rgba(111,168,255,0.22)");
+  body.addColorStop(1, "rgba(183,156,255,0.12)");
+  ctx.fillStyle = body;
+  ctx.shadowColor = "rgba(94,230,208,0.6)";
+  ctx.shadowBlur = 80;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(238,243,255,0.35)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // orbiting motes
+  for (let i = 0; i < 6; i++) {
+    const a = t * 0.25 + i * Math.PI / 3;
+    const rr = r + 40 + 14 * Math.sin(t + i);
+    ctx.fillStyle = `rgba(238,243,255,${0.5 + 0.3 * Math.sin(t * 2 + i)})`;
+    ctx.beginPath();
+    ctx.arc(CX + Math.cos(a) * rr, CY + Math.sin(a) * rr, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // breath labels inside the orb
+  softText("شهيق", CX, CY, t, 5.1, 9.2, { font: font(700, 64), fi: 1.2, fo: 0.8 });
+  softText("زفير", CX, CY, t, 9.6, 13.6, { font: font(700, 64), fi: 1.2, fo: 0.9, glow: "rgba(183,156,255,0.4)" });
+
+  // progress arc for breathing
+  const pk = prog(t, 5, 8.6);
+  if (pk > 0 && pk < 1) {
+    ctx.save();
+    ctx.globalAlpha = window_(t, 4.8, 13.8, 0.6, 0.6) * 0.8;
+    ctx.strokeStyle = C.teal;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(CX, CY, 330, -Math.PI / 2, -Math.PI / 2 + pk * Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ---------- closing title ----------
+function drawTitle(t) {
+  const k = window_(t, 15.6, 19.4, 2, 1.6);
+  if (k <= 0) return;
+  softText("هدوء", CX, CY - 30, t, 15.6, 19.4, { font: font(900, 200), fi: 2, fo: 1.6, glow: "rgba(94,230,208,0.5)" });
+  // thin line that draws outward
+  const lk = eInOutSine(prog(t, 16.4, 1.8));
+  ctx.save();
+  ctx.globalAlpha = k;
+  const lg = ctx.createLinearGradient(CX - 260, 0, CX + 260, 0);
+  lg.addColorStop(0, "rgba(94,230,208,0)");
+  lg.addColorStop(0.5, "rgba(238,243,255,0.8)");
+  lg.addColorStop(1, "rgba(183,156,255,0)");
+  ctx.strokeStyle = lg;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(CX - 260 * lk, CY + 110);
+  ctx.lineTo(CX + 260 * lk, CY + 110);
+  ctx.stroke();
+  ctx.restore();
+  softText("لحظة لك وحدك", CX, CY + 175, t, 16.8, 19.4, { font: font(400, 46), color: C.muted, fi: 1.6, fo: 1.4 });
+}
+
+function render(t) {
+  ctx.save();
+  drawBackground(t);
+  drawOrb(t);
+
+  // captions
+  softText("خذ نفساً عميقاً", CX, H * 0.2, t, 1.2, 5.2, { font: font(700, 80) });
+  softText("ببطء… مع الدائرة", CX, H * 0.84, t, 5.6, 13.4, { font: font(400, 44), color: C.muted, fi: 1.6 });
+  softText("كل شيء سيكون بخير", CX, H * 0.2, t, 13.6, 16.4, { font: font(700, 80), glow: "rgba(183,156,255,0.45)" });
+
+  drawTitle(t);
+
+  // vignette
+  const v = ctx.createRadialGradient(CX, CY, H * 0.35, CX, CY, W * 0.7);
+  v.addColorStop(0, "rgba(0,0,0,0)");
+  v.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+
+  // global fade in / out
+  const f = Math.max(1 - eInOutSine(prog(t, 0, 1.5)), eInOutSine(prog(t, DURATION - 1.2, 1.2)));
+  if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = Promise.all([400, 700, 900].map(w => document.fonts.load(`${w} 50px Cairo`, "هدوء")))
+  .then(() => true);
+
+if (!navigator.webdriver) {
+  const t0 = performance.now();
+  window.ready.then(() => {
+    const loop = now => { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>
