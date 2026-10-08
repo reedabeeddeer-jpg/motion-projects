@@ -20,8 +20,8 @@ x*=0.55
 def bell(m,t0,amp=1.0,dec=2.2):
     f=hz(m); tt=np.clip(t-t0,0,None); e=np.where(t>=t0,np.exp(-tt/dec*2.2),0)*np.minimum(1,tt/0.01)
     return amp*e*(np.sin(2*np.pi*f*t)+0.35*np.sin(2*np.pi*2.0*f*t)+0.12*np.sin(2*np.pi*3.01*f*t))
-# sparse melody: the last few notes line up with the final letters lifting (~4.0-5.8 s)
-mel=[(1.0,74),(1.9,77),(2.8,81),(3.7,79),(4.2,77),(4.7,81),(5.2,84),(6.2,81),(7.1,77),(8.0,74)]
+# sparse melody: rising notes follow the letters climbing (~1-4 s), then it settles
+mel=[(1.0,74),(1.7,77),(2.4,81),(3.0,79),(3.5,81),(4.0,84),(5.2,81),(6.4,77),(7.6,74)]
 b=sum(bell(m,t0,0.18) for t0,m in mel)
 x+=b
 # light reverb: exponentially decaying noise impulse response via FFT convolution
