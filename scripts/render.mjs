@@ -15,7 +15,8 @@ const out = path.resolve(root, opt("--out", "output/motion.mp4"));
 const audio = path.resolve(root, opt("--audio", "output/soundtrack.wav"));
 fs.mkdirSync(path.dirname(out), { recursive: true });
 
-const browser = await chromium.launch();
+// file access lets pages draw local images onto the canvas without tainting it
+const browser = await chromium.launch({ args: ["--allow-file-access-from-files"] });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 await page.goto(pathToFileURL(src).href);
 await page.evaluate(() => window.ready);
@@ -23,10 +24,9 @@ const duration = await page.evaluate(() => window.DURATION);
 const frames = Math.round(duration * fps);
 
 if (args.includes("--preview")) {
-  const dir = path.join(root, "output/stills", path.basename(src, ".html"));
+  const dir = path.resolve(root, opt("--stills", path.join("output/stills", path.basename(src, ".html"))));
   fs.mkdirSync(dir, { recursive: true });
-  const defTimes = (await page.evaluate(() => window.PREVIEW_TIMES))?.join(",") ?? "0.8,2,2.8,4.8,7.8,8.5,11.5";
-  for (const t of (opt("--times", defTimes)).split(",").map(Number)) {
+  for (const t of (opt("--times", "0.8,2,2.8,4.8,7.8,8.5,11.5")).split(",").map(Number)) {
     const png = await page.evaluate(t => { window.render(t); return document.getElementById("c").toDataURL("image/png"); }, t);
     fs.writeFileSync(path.join(dir, `t${t.toFixed(1)}.png`), Buffer.from(png.split(",")[1], "base64"));
   }

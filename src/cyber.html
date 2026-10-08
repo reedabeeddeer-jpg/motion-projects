@@ -702,7 +702,6 @@ function render(t) {
 }
 
 window.DURATION = DURATION;
-window.PREVIEW_TIMES = [1.0, 2.6, 3.8, 6.5, 11.5, 15.0, 18.3, 21.0];
 window.render = render;
 window.ready = Promise.all([400, 700, 900].flatMap(w => [
   document.fonts.load(`${w} 50px Cairo`, "أمن"),
