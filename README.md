@@ -15,6 +15,27 @@ npm run preview    # صور ثابتة في output/stills
 
 Font: Cairo (SIL OFL), في `assets/fonts`.
 
+## موشن انفوجرافيك: الأمن السيبراني
+
+فيديو 22 ثانية (1920×1080، 30fps) بطابع تقني (شاشة مراقبة، مطر ثنائي، انتقالات glitch) مع موسيقى ومؤثرات مولّدة برمجياً.
+
+1. مقدمة: درع يُرسم وقفل يُغلق، ثم العنوان «الأمن السيبراني».
+2. أرقام مقلقة: هجوم كل 39 ثانية، 95% من الاختراقات سببها خطأ بشري، 10.5 تريليون دولار تكلفة سنوية.
+3. أبرز التهديدات: التصيّد، برامج الفدية، البرمجيات الخبيثة، كلمات المرور الضعيفة.
+4. كيف تحمي نفسك؟ قائمة نصائح تُعلَّم تباعاً مع عدّاد «مستوى الأمان» يصل إلى 100%.
+5. خاتمة: «أمانك الرقمي يبدأ منك».
+
+- `src/cyber.html`: الأنيميشن (افتحه في المتصفح للمعاينة).
+- `scripts/cyber_soundtrack.py`: الموسيقى والمؤثرات في `output/cyber-soundtrack.wav`.
+
+```bash
+npm run cyber:audio
+npm run cyber:render    # output/cyber.mp4
+npm run cyber:preview   # صور ثابتة في output/stills/cyber
+```
+
+الأرقام في مشهد الإحصاءات تقديرات شائعة في تقارير الأمن السيبراني (دراسة جامعة ماريلاند، تقديرات Cybersecurity Ventures لعام 2025)، ويمكن تعديلها من مصفوفة `STATS` في `src/cyber.html`.
+
 ## remotion-logo
 
 مشروع Remotion: ظهور لوغو بحركة ناعمة مع نص عربي تحته، 10 ثوانٍ بدقة 1080p على خلفية متدرجة داكنة.
@@ -96,3 +117,26 @@ node scripts/render.mjs --src fashion-offer/src/offer.html --audio fashion-offer
 ```
 
 Fonts: Aref Ruqaa, Tajawal, Playfair Display (SIL OFL)، في `fashion-offer/assets/fonts`.
+## إعلان «جكوك شي» (15 ثانية، 1920×1080)
+
+عرض أسعار (الحجاب 3,000 والقميص 7,000 دينار عراقي) مع خصم 50%. البنت على اليمين تتحرك وفمها يتزامن مع التعليق الصوتي، والجرافيك على اليسار، والخلفية تتغير خمس مرات.
+
+- `src/promo.html`: الأنيميشن (Canvas).
+- `assets/promo/`: الصورة، والصورة المفرّغة (rembg)، والتعليق الصوتي من ElevenLabs (`vo.mp3`).
+- `scripts/promo_soundtrack.py`: الموسيقى الحماسية والمؤثرات ودمج الصوت، ويكتب `assets/promo/vo_env.js` لتحريك الفم.
+
+```bash
+python3 scripts/promo_soundtrack.py
+node scripts/render.mjs --src src/promo.html --audio output/promo_soundtrack.wav --out output/jakook-shi-promo.mp4
+```
+
+Fonts: Reem Kufi و Aref Ruqaa (SIL OFL).
+
+### النسخة الثانية: عرض السيت الكامل (`src/promo-set.html`)
+
+البنت في المنتصف، بطاقة الحجاب يسار والقميص يمين، ثم «السيت الكامل» 10,000 ← 5,000 دينار (خصم 50%). الخلفية تتغير ست مرات بانتقال شرائح.
+
+```bash
+python3 scripts/promo_set_soundtrack.py
+node scripts/render.mjs --src src/promo-set.html --audio output/promo_set_soundtrack.wav --out output/jakook-shi-set-offer.mp4
+```
