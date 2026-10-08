@@ -43,16 +43,22 @@ function build(){
  parts.forEach(q=>q.n=total);
 }
 window.render=t=>{
+ const total=parts.length, tL=T0+total*STAG+DUR+0.4; // second phase starts after all letters settled
  parts.forEach(q=>{
   const s=(t-T0-q.k*STAG)/DUR;
-  const base=oQuint(s);
-  // last letters: taller rise + clear soft overshoot before settling
-  const e=q.last?oBack(s):base;
-  const rise=q.last?170:100;
+  const drop=oQuint(s);                       // phase 1: letters start HIGH and come down to the line
+  let y=-(1-drop)*130;
+  let bump=0;
+  if(q.last){                                 // phase 2: last letters lift up after a short pause, then settle
+   const j=q.k-(total-4), u=cl((t-tL-j*0.16)/1.5);
+   bump=Math.pow(Math.sin(Math.PI*oQuint(u*0.5+0.0)*2/2*1)||0,1);
+   bump=Math.sin(Math.PI*u); bump=bump*bump*(3-2*bump);
+   y-=bump*75;
+  }
   const o=cl((t-9.0-q.k*0.02)/0.8);
   q.el.style.opacity=cl(s*3)*(1-o);
-  q.el.style.transform=`translateY(${(1-e)*rise}px)`;
-  q.el.style.color=q.last?`rgb(${246-(246-246)*0},${236-(236-210)*(1-cl(s-0.4))*0},${212})`:'';
+  q.el.style.transform=`translateY(${y}px)`;
+  q.el.style.color=`rgb(${246-6*bump},${236-40*bump},${212-112*bump})`;
  });
  document.getElementById('glow').style.opacity=.4+.6*cl(t/3);
  const r=oQuint((t-0.4)/1.6)*(1-cl((t-9)/0.8))*700;document.getElementById('rule').style.width=r+'px';
