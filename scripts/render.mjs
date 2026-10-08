@@ -27,7 +27,7 @@ if (args.includes("--preview")) {
   const dir = path.resolve(root, opt("--stills", path.join("output/stills", path.basename(src, ".html"))));
   fs.mkdirSync(dir, { recursive: true });
   for (const t of (opt("--times", "0.8,2,2.8,4.8,7.8,8.5,11.5")).split(",").map(Number)) {
-    const png = await page.evaluate(t => { window.render(t); return document.getElementById("c").toDataURL("image/png"); }, t);
+    const png = await page.evaluate(async t => { await window.render(t); return document.getElementById("c").toDataURL("image/png"); }, t);
     fs.writeFileSync(path.join(dir, `t${t.toFixed(1)}.png`), Buffer.from(png.split(",")[1], "base64"));
   }
   await browser.close();
@@ -45,7 +45,7 @@ const ff = spawn("ffmpeg", [
 ], { stdio: ["pipe", "inherit", "inherit"] });
 
 for (let f = 0; f < frames; f++) {
-  const png = await page.evaluate(t => { window.render(t); return document.getElementById("c").toDataURL("image/png"); }, f / fps);
+  const png = await page.evaluate(async t => { await window.render(t); return document.getElementById("c").toDataURL("image/png"); }, f / fps);
   const buf = Buffer.from(png.split(",")[1], "base64");
   if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once("drain", r));
   if (f % 30 === 0) process.stdout.write(`\rframe ${f}/${frames}`);

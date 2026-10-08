@@ -84,10 +84,13 @@ npm run calm:render    # output/calm.mp4
 
 - `fashion-offer/src/offer.html`: الأنيميشن (Canvas)، والأسعار في أعلى السكربت.
 - `fashion-offer/scripts/prepare_image.py`: يكبّر الصورة ويزيل خلفيتها (rembg) ويحفظ `assets/model-cutout.png`.
+- `fashion-offer/scripts/prepare_talking.py`: يحوّل فيديو SadTalker (`assets/talking-raw.mp4`، الفتاة تتكلم مع مزامنة الشفاه على التعليق) إلى إطارات شفافة في `assets/talking/`.
 - `fashion-offer/scripts/soundtrack.py`: الموسيقى والمؤثرات، ويدمج معها التعليق الصوتي `assets/audio/vo-short.mp3`.
 
 ```bash
 pip install rembg && python3 fashion-offer/scripts/prepare_image.py
+# talking head: SadTalker (github.com/OpenTalker/SadTalker) --preprocess full --size 256 على الصورة والتعليق المسرّع ×1.33
+python3 fashion-offer/scripts/prepare_talking.py fashion-offer/assets/talking-raw.mp4
 python3 fashion-offer/scripts/soundtrack.py
 node scripts/render.mjs --src fashion-offer/src/offer.html --audio fashion-offer/output/soundtrack.wav --out fashion-offer/output/jakook-shein-offer.mp4
 ```
