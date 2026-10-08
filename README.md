@@ -107,3 +107,12 @@ node scripts/render.mjs --src src/promo.html --audio output/promo_soundtrack.wav
 ```
 
 Fonts: Reem Kufi و Aref Ruqaa (SIL OFL).
+
+### النسخة الثانية: عرض السيت الكامل (`src/promo-set.html`)
+
+البنت في المنتصف، بطاقة الحجاب يسار والقميص يمين، ثم «السيت الكامل» 10,000 ← 5,000 دينار (خصم 50%). الخلفية تتغير ست مرات بانتقال شرائح.
+
+```bash
+python3 scripts/promo_set_soundtrack.py
+node scripts/render.mjs --src src/promo-set.html --audio output/promo_set_soundtrack.wav --out output/jakook-shi-set-offer.mp4
+```
