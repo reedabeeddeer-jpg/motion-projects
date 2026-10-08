@@ -26,7 +26,7 @@ function build(){
  const seg=new Intl.Segmenter('ar',{granularity:'grapheme'});
  let k=0;const words=TEXT.split(' ');
  const total=words.reduce((n,w)=>n+[...seg.segment(w)].length,0);
- words.forEach(w=>{
+ words.forEach((w,wi)=>{
   const wd=document.createElement('span');wd.className='word';wd.textContent=w;stage.appendChild(wd);
   const tn=wd.firstChild,W=wd.getBoundingClientRect(),gs=[...seg.segment(w)];
   const rects=gs.map(g=>{const r=document.createRange();r.setStart(tn,g.index);r.setEnd(tn,g.index+g.segment.length);const b=r.getBoundingClientRect();return [b.left-W.left,b.right-W.left]});
@@ -38,21 +38,21 @@ function build(){
    const isFirstVisual=rects[i][1]>=Math.max(...rects.map(r=>r[1]))-0.5, isLastVisual=rects[i][0]<=Math.min(...rects.map(r=>r[0]))+0.5;
    const L=isLastVisual?-200:x0-0.6, Rr=isFirstVisual?-200:(W.width-x1)-0.6;
    p.style.clipPath=`inset(-300px ${Rr}px -300px ${L}px)`;
-   wd.appendChild(p);parts.push({el:p,k:k,last:k>=total-4});k++;});
+   wd.appendChild(p);parts.push({el:p,k:k,w:wi,last:k>=total-4});k++;});
  });
  parts.forEach(q=>q.n=total);
 }
 window.render=t=>{
- const total=parts.length;
  parts.forEach(q=>{
-  // ONE continuous rise from below, pure ease-out (no overshoot, no bounce).
-  // The final letters start deeper and travel longer, so they climb higher in the same move before settling.
-  const ramp=cl((q.k-(total-6))/5);                 // 0 for most letters -> 1 for the very last letter
-  const rise=110+ramp*150, dur=1.0+ramp*0.9;
+  // word 0: quick rise. LAST TWO WORDS: letters climb from deeper below, longer, with a gradual opacity fade-in.
+  // One smooth ease-out move, no overshoot / bounce.
+  const tail=q.w>=1;
+  const rise=tail?170:110, dur=tail?1.5:1.0;
   const s=(t-T0-q.k*STAG)/dur;
   const y=(1-oQuint(s))*rise;
   const o=cl((t-9.0-q.k*0.02)/0.8);
-  q.el.style.opacity=cl(s*3)*(1-o);
+  const op=tail?Math.pow(cl(s),1.6):cl(s*3);        // slow opacity ramp tied to the rise
+  q.el.style.opacity=op*(1-o);
   q.el.style.transform=`translateY(${y}px)`;
  });
  document.getElementById('glow').style.opacity=.4+.6*cl(t/3);
