@@ -75,6 +75,11 @@ POINTS = [
     {"side": "chatgpt", "n": 3, "word": 60, "icon": "wrench", "ar": "يساعدك بحل الأخطاء وتحسين الحركات", "en": "Fixes errors & polishes motion"},
 ]
 OUTRO_SECONDS = 4.0
+# Gestures the detector misses (output frame, position as a fraction of the frame).
+MANUAL_MOTION = [
+    {"frame": 328, "x": 0.17, "y": 0.42, "strength": 0.04},  # points left at "راح نبلش بـ Claude Code"
+    {"frame": 755, "x": 0.74, "y": 0.38, "strength": 0.04},  # points right at "نبلش عن الـ ChatGPT"
+]
 
 GRADE = (
     "hflip,"  # selfie camera recorded mirrored (shirt text reads backwards)
@@ -201,6 +206,9 @@ def motion_events(masks, segs):
     thr = max(0.012, np.percentile(energy, 97))
     for t in range(len(energy)):
         if energy[t] > thr and t - last > FPS * 1.2 and energy[t] == energy[max(0, t - 6):t + 7].max():
+            # a pointing hand sits beside the body; changes centred on the torso are leans or head moves
+            if abs(cents[t][0] - 0.5) < 0.12:
+                continue
             events.append({"frame": int(t), "x": cents[t][0], "y": cents[t][1], "strength": float(energy[t])})
             last = t
     print("  motion events:", [(e["frame"], round(e["strength"], 3)) for e in events])
@@ -252,7 +260,7 @@ def build_edit(segs, words, events):
         "captions": captions,
         "sections": {k: to_out(words[i]["start"]) for k, i in SECTIONS.items()},
         "points": [{**p, "from": to_out(words[p["word"]]["start"])} for p in POINTS],
-        "motion": events,
+        "motion": sorted(events + MANUAL_MOTION, key=lambda m: m["frame"]),
     }
 
 

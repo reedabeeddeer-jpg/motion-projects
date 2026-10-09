@@ -20,6 +20,9 @@ type Props = { edit: Edit };
 
 const FACE_Y = 0.28; // zoom origin: roughly the face, as a fraction of frame height
 const SHIFT = 190; // how far he slides aside to make room for a panel
+// In the footage he points to screen-left when saying "Claude Code" and to screen-right for "ChatGPT",
+// so each tool's cards live on the side he gestures to.
+const SCREEN: Record<Side, "left" | "right"> = { claude: "left", chatgpt: "right" };
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -41,7 +44,7 @@ const usePersonTransform = (e: Edit) => {
   const intro = interpolate(spring({ frame, fps, config: { damping: 200 }, durationInFrames: 25 }), [0, 1], [0.12, 0]);
   const toClaude = spring({ frame: frame - e.sections.claude, fps, config: { damping: 18, mass: 0.9 } });
   const toGpt = spring({ frame: frame - e.sections.chatgpt, fps, config: { damping: 18, mass: 0.9 } });
-  const tx = -SHIFT * toClaude + 2 * SHIFT * toGpt;
+  const tx = SHIFT * toClaude - 2 * SHIFT * toGpt;
   const out = spring({ frame: frame - e.speechFrames, fps, config: { damping: 200 }, durationInFrames: 20 });
   const scale = (base + push + intro) * (1 - 0.25 * out);
   return { scale, tx: tx * (1 - out), ty: 220 * out, opacity: 1 - out, frame };
@@ -164,13 +167,21 @@ const Person: React.FC<{ e: Edit }> = ({ e }) => {
 
 /* ------------------------------------------------------------- motion fx */
 
+// A gesture made while naming a tool takes that tool's colour.
+const gestureColor = (f: number, e: Edit) => {
+  const near = e.captions.flatMap((c) => c.words).filter((w) => Math.abs(w.from - f) <= 12);
+  if (near.some((w) => w.text.startsWith("Claude"))) return COLORS.claude;
+  if (near.some((w) => w.text.startsWith("ChatGPT"))) return COLORS.chatgpt;
+  return accentAt(f, e);
+};
+
 const Burst: React.FC<{ ev: MotionEvent; e: Edit }> = ({ ev, e }) => {
   const frame = useCurrentFrame(); // local to the Sequence
   const { width, height } = useVideoConfig();
   // anchor to where the person is drawn at the moment of the gesture
   const t = usePersonTransformAt(e, ev.frame);
   const p = toScreen(ev.x, ev.y, t, width, height);
-  const accent = accentAt(ev.frame, e);
+  const accent = gestureColor(ev.frame, e);
   const life = interpolate(frame, [0, 22], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
   const fade = interpolate(frame, [10, 24], [1, 0], clamp);
   return (
@@ -226,7 +237,7 @@ const usePersonTransformAt = (e: Edit, f: number) => {
   const push = interpolate(f, [cut.from, cut.to], [0, 0.02], clamp);
   const toClaude = spring({ frame: f - e.sections.claude, fps, config: { damping: 18, mass: 0.9 } });
   const toGpt = spring({ frame: f - e.sections.chatgpt, fps, config: { damping: 18, mass: 0.9 } });
-  return { scale: base + push, tx: -SHIFT * toClaude + 2 * SHIFT * toGpt, ty: 0 };
+  return { scale: base + push, tx: SHIFT * toClaude - 2 * SHIFT * toGpt, ty: 0 };
 };
 
 /* ------------------------------------------------------------------ panels */
@@ -258,7 +269,7 @@ const PointCard: React.FC<{ p: Point; at: number; active: boolean }> = ({ p, at,
   const draw = interpolate(frame - at, [4, 26], [0, 1], clamp);
   const sweep = interpolate(frame - at, [6, 28], [-120, 220], clamp);
   const c = SIDE[p.side].color;
-  const dir = p.side === "claude" ? 1 : -1;
+  const dir = SCREEN[p.side] === "right" ? 1 : -1;
   return (
     <div
       style={{
@@ -328,14 +339,14 @@ const Panel: React.FC<{ e: Edit; side: Side; start: number; end: number; outro?:
   const v = enter * (1 - leave);
   if (frame < start || v < 0.001) return null;
   const pts = e.points.filter((p) => p.side === side);
-  const dir = side === "claude" ? 1 : -1;
+  const dir = SCREEN[side] === "right" ? 1 : -1;
   const meta = SIDE[side];
   return (
     <div
       style={{
         position: "absolute",
         top: outro ? 210 : 130,
-        [side === "claude" ? "right" : "left"]: outro ? 110 : 60,
+        [SCREEN[side]]: outro ? 110 : 60,
         width: outro ? 760 : 560,
         display: "flex",
         flexDirection: "column",
@@ -357,7 +368,7 @@ const Panel: React.FC<{ e: Edit; side: Side; start: number; end: number; outro?:
           borderRadius: 2,
           background: `linear-gradient(${dir > 0 ? "270deg" : "90deg"}, ${meta.color}, transparent)`,
           width: `${interpolate(frame - start, [5, 30], [0, 100], clamp)}%`,
-          alignSelf: side === "claude" ? "flex-end" : "flex-start",
+          alignSelf: SCREEN[side] === "right" ? "flex-end" : "flex-start",
         }}
       />
       {pts.map((p, i) => {
@@ -414,15 +425,15 @@ const Versus: React.FC<{ e: Edit }> = ({ e }) => {
   const out = interpolate(frame, [end - 4, end + 12], [1, 0], clamp);
   const card = (side: Side, delay: number) => {
     const s = spring({ frame: frame - start - delay, fps, config: { damping: 13 } });
-    const dir = side === "claude" ? 1 : -1;
+    const dir = SCREEN[side] === "right" ? 1 : -1;
     return (
       <div
         style={{
           position: "absolute",
           top: 300,
-          [side === "claude" ? "right" : "left"]: 90,
+          [SCREEN[side]]: 90,
           display: "flex",
-          flexDirection: side === "claude" ? "row-reverse" : "row",
+          flexDirection: SCREEN[side] === "right" ? "row-reverse" : "row",
           alignItems: "center",
           gap: 20,
           padding: "22px 34px",
@@ -456,7 +467,7 @@ const Versus: React.FC<{ e: Edit }> = ({ e }) => {
           fontSize: 150,
           fontStyle: "italic",
           letterSpacing: -4,
-          background: `linear-gradient(90deg, ${COLORS.chatgpt}, #fff 50%, ${COLORS.claude})`,
+          background: `linear-gradient(90deg, ${COLORS.claude}, #fff 50%, ${COLORS.chatgpt})`,
           WebkitBackgroundClip: "text",
           color: "transparent",
           filter: "drop-shadow(0 0 30px rgba(255,255,255,0.45)) drop-shadow(0 10px 20px rgba(0,0,0,0.6))",
@@ -619,9 +630,9 @@ const Outro: React.FC<{ e: Edit }> = ({ e }) => {
           transform: `translateY(${(1 - title) * -60}px)`,
         }}
       >
-        <span style={{ color: COLORS.chatgpt }}>ChatGPT</span>
-        <span style={{ color: COLORS.muted, margin: "0 28px", fontStyle: "italic" }}>vs</span>
         <span style={{ color: COLORS.claude }}>Claude Code</span>
+        <span style={{ color: COLORS.muted, margin: "0 28px", fontStyle: "italic" }}>vs</span>
+        <span style={{ color: COLORS.chatgpt }}>ChatGPT</span>
       </div>
       <Panel e={e} side="claude" start={start + 6} end={1e9} outro />
       <Panel e={e} side="chatgpt" start={start + 12} end={1e9} outro />
@@ -634,7 +645,7 @@ const Outro: React.FC<{ e: Edit }> = ({ e }) => {
           height: 120,
           borderRadius: 60,
           transform: `translate(-50%,-50%) scale(${vs})`,
-          background: `linear-gradient(135deg, ${COLORS.chatgpt}, ${COLORS.claude})`,
+          background: `linear-gradient(135deg, ${COLORS.claude}, ${COLORS.chatgpt})`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
