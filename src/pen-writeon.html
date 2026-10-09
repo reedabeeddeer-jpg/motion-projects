@@ -27,7 +27,7 @@ const NS = "http://www.w3.org/2000/svg";
 const SW_START = window.PATHS.end + 0.1, SW_END = SW_START + 1.2, SP_T = SW_END - 0.3;
 const clamp = (v,a=0,b=1)=>Math.min(b,Math.max(a,v));
 const ease = x => x<.5 ? 4*x*x*x : 1-Math.pow(-2*x+2,3)/2;
-const P = window.PATHS, items = [];
+const P = window.PATHS, items = [], fills = [];
 const defs = document.getElementById("defs"), host = document.getElementById("pen");
 P.comps.forEach((c, ci) => {
   const m = document.createElementNS(NS, "mask");
@@ -37,6 +37,9 @@ P.comps.forEach((c, ci) => {
   mp.setAttribute("d", c.mask); mp.setAttribute("fill", "#fff"); mp.setAttribute("fill-rule", "evenodd");
   m.appendChild(mp); defs.appendChild(m);
   const g = document.createElementNS(NS, "g"); g.setAttribute("mask", `url(#m${ci})`); host.appendChild(g);
+  const fill = document.createElementNS(NS, "path");        // safety: guarantees the whole glyph shows once the pen has passed
+  fill.setAttribute("d", c.mask); fill.setAttribute("fill", "#fff"); fill.setAttribute("fill-rule", "evenodd"); fill.setAttribute("opacity", 0);
+  host.appendChild(fill); fills.push({p: fill, s: c.edges[c.edges.length - 1].t1});
   c.edges.forEach(e => {
     const p = document.createElementNS(NS, "path");
     p.setAttribute("d", "M" + e.pts.map(q => q.join(" ")).join(" L"));
@@ -67,6 +70,7 @@ window.render = function(t){
     const pt = active.it.p.getPointAtLength(active.it.L * active.q);
     tip.setAttribute("cx", pt.x); tip.setAttribute("cy", pt.y); tip.setAttribute("opacity", 0.9);
   } else tip.setAttribute("opacity", 0);
+  for (const f of fills) f.p.setAttribute("opacity", clamp((t - f.s) / 0.3));
   const sp = ease(clamp((t - SW_START) / (SW_END - SW_START)));
   sw.style.strokeDashoffset = swL * (1 - sp);
   sw.style.opacity = t >= SW_START ? 1 : 0;

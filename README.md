@@ -215,11 +215,11 @@ python3 scripts/render_name.py output/sahib.wav output/sahib-alzaman.mp4 --html 
 
 ### بسم الله الرحمن الرحيم (`output/basmala.mp4`)
 
-نفس الأسلوب (خط واحد يمشي على مركز الحروف كقلم) لكن على «بسم الله الرحمن الرحيم»، 12 ثانية. `src/pen-writeon.html` عام لأي عبارة (الخط تحت النص والتوقيت يُحسبان من ملف المسارات).
+نفس الأسلوب (خط واحد يمشي على مركز الحروف كقلم) لكن على «بسم الله الرحمن الرحيم» بخط «ريم كوفي»، 12 ثانية. بعد مرور القلم على كل مقطع يظهر الحرف كاملًا، فالجملة تكتمل دائمًا. `src/pen-writeon.html` عام لأي عبارة.
 
 ```bash
-python3 scripts/name_paths.py FONT.ttf src/basmala_paths.json "بسم الله الرحمن الرحيم"
-python3 scripts/centerline_paths.py src/basmala_paths.json src/basmala_centerline.json 240 175 600 0.8 8.0   # SIZE X0 BASE T0 T1
-python3 scripts/sahib_audio.py output/basmala.wav 8.37 8.27 12
-python3 scripts/render_name.py output/basmala.wav output/basmala.mp4 --html src/pen-writeon.html --json src/basmala_centerline.json --dur 12
+python3 scripts/name_paths.py FONT.ttf src/basmala_reem_paths.json "بسم الله الرحمن الرحيم"   # FONT.ttf = reemkufi-arabic-700 woff2 محوّل إلى ttf
+python3 scripts/centerline_paths.py src/basmala_reem_paths.json src/basmala_reem_centerline.json 190 190 600 0.8 8.0   # SIZE X0 BASE T0 T1
+python3 scripts/sahib_audio.py output/basmala.wav 8.49 8.39 12
+python3 scripts/render_name.py output/basmala.wav output/basmala.mp4 --html src/pen-writeon.html --json src/basmala_reem_centerline.json --dur 12
 ```
