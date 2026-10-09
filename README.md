@@ -200,3 +200,14 @@ Font: Aref Ruqaa (SIL OFL).
 python3 scripts/typing_audio.py
 node scripts/render.mjs --src src/typing.html --audio output/typing.wav --out output/typing.mp4
 ```
+
+## sahib-alzaman (يا صاحب الزمان)
+
+نفس طريقة سكربت `signature_write_on.jsx` (Trim Path لكل حرف بترتيب الكتابة من اليمين لليسار، ثم يتحول الخط إلى تعبئة بيضاء) لكن بدون After Effects: تُستخرج مسارات الحروف من خط «عارف رقعة» بـ HarfBuzz ثم تُحرَّك كـ stroke-dashoffset. الفيديو 10 ثوانٍ، 1920×1080، مع خط تحت العبارة ولمعة وصوت قلم.
+
+```bash
+pip install uharfbuzz fonttools brotli playwright
+python3 scripts/name_paths.py FONT.ttf src/sahib_paths.json "يا صاحب الزمان"   # FONT.ttf = aref-ruqaa woff2 محوّل إلى ttf
+python3 scripts/sahib_audio.py output/sahib-alzaman.wav
+python3 scripts/render_name.py output/sahib-alzaman.wav output/sahib-alzaman.mp4 --html src/sahib-alzaman.html --json src/sahib_paths.json --dur 10
+```
