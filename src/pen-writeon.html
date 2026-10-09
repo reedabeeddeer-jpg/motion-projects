@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ar"><head><meta charset="utf-8"><title>Pen write-on</title>
+<style>
+  html,body{margin:0;background:#000;overflow:hidden}
+  svg{display:block;width:1920px;height:1080px;background:#000}
+</style></head>
+<body>
+<svg id="s" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs id="defs"></defs>
+  <g id="cam"><g id="glow" style="filter:drop-shadow(0 0 8px rgba(255,255,255,.35))">
+    <g id="pen"></g>
+    <path id="swoosh" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"
+      d="M300 735 C 700 700, 1200 690, 1690 705"/>
+  </g>
+  <circle id="tip" r="7" fill="#fff" opacity="0" style="filter:drop-shadow(0 0 12px #fff)"/>
+  <g id="spark" opacity="0" style="filter:drop-shadow(0 0 14px #fff)">
+    <path d="M0 -46 C 3 -10, 10 -3, 46 0 C 10 3, 3 10, 0 46 C -3 10, -10 3, -46 0 C -10 -3, -3 -10, 0 -46Z" fill="#fff"/>
+    <path d="M0 -20 L3 -3 L20 0 L3 3 L0 20 L-3 3 L-20 0 L-3 -3Z" fill="#fff" transform="rotate(45)"/>
+  </g></g>
+  <rect id="fade" width="1920" height="1080" fill="#000" opacity="0"/>
+</svg>
+<script>
+// Same idea as signature_write_on.jsx: a stroke whose Trim-Paths "End" goes 0→100% along the pen path of every
+// letter, one stroke after another (right → left). The stroke is clipped by the glyph shape so the letter keeps its calligraphy.
+window.DURATION = 12;
+const NS = "http://www.w3.org/2000/svg";
+const SW_START = window.PATHS.end + 0.1, SW_END = SW_START + 1.2, SP_T = SW_END - 0.3;
+const clamp = (v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const ease = x => x<.5 ? 4*x*x*x : 1-Math.pow(-2*x+2,3)/2;
+const P = window.PATHS, items = [], fills = [];
+const defs = document.getElementById("defs"), host = document.getElementById("pen");
+P.comps.forEach((c, ci) => {
+  const m = document.createElementNS(NS, "mask");
+  m.setAttribute("id", "m" + ci); m.setAttribute("maskUnits", "userSpaceOnUse");
+  m.setAttribute("x", 0); m.setAttribute("y", 0); m.setAttribute("width", 1920); m.setAttribute("height", 1080);
+  const mp = document.createElementNS(NS, "path");
+  mp.setAttribute("d", c.mask); mp.setAttribute("fill", "#fff"); mp.setAttribute("fill-rule", "evenodd");
+  m.appendChild(mp); defs.appendChild(m);
+  const g = document.createElementNS(NS, "g"); g.setAttribute("mask", `url(#m${ci})`); host.appendChild(g);
+  const fill = document.createElementNS(NS, "path");        // safety: guarantees the whole glyph shows once the pen has passed
+  fill.setAttribute("d", c.mask); fill.setAttribute("fill", "#fff"); fill.setAttribute("fill-rule", "evenodd"); fill.setAttribute("opacity", 0);
+  host.appendChild(fill); fills.push({p: fill, s: c.edges[c.edges.length - 1].t1});
+  c.edges.forEach(e => {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", "M" + e.pts.map(q => q.join(" ")).join(" L"));
+    p.setAttribute("fill", "none"); p.setAttribute("stroke", "#fff"); p.setAttribute("stroke-width", c.width);
+    p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "round");
+    g.appendChild(p);
+    const L = p.getTotalLength();
+    if (!c.dot) { p.style.strokeDasharray = L + " " + (L + 1); p.style.strokeDashoffset = L + 1; }
+    items.push({p, L, s: e.t0, d: e.t1 - e.t0, dot: c.dot, w: c.width});
+  });
+});
+const bb = host.getBBox(), sw = document.getElementById("swoosh");   // underline follows the text box
+sw.setAttribute("d", `M${bb.x + bb.width*0.12} ${bb.y + bb.height + 40} C ${bb.x + bb.width*0.35} ${bb.y + bb.height + 5}, ${bb.x + bb.width*0.7} ${bb.y + bb.height - 5}, ${bb.x + bb.width*0.97} ${bb.y + bb.height + 10}`);
+const swL = sw.getTotalLength();
+sw.style.strokeDasharray = swL + " " + swL;
+const spark = document.getElementById("spark"), tip = document.getElementById("tip");
+const endPt = sw.getPointAtLength(swL);
+
+window.render = function(t){
+  let active = null;
+  for (const it of items){
+    const q = clamp((t - it.s) / it.d);
+    if (it.dot) it.p.setAttribute("stroke-width", it.w * ease(q));   // diacritic dots pop in
+    else it.p.style.strokeDashoffset = (it.L + 1) * (1 - q);          // Trim Paths End: 0 → 100 %
+    if (!it.dot && q > 0 && q < 1) active = {it, q};
+  }
+  if (active){
+    const pt = active.it.p.getPointAtLength(active.it.L * active.q);
+    tip.setAttribute("cx", pt.x); tip.setAttribute("cy", pt.y); tip.setAttribute("opacity", 0.9);
+  } else tip.setAttribute("opacity", 0);
+  for (const f of fills) f.p.setAttribute("opacity", clamp((t - f.s) / 0.3));
+  const sp = ease(clamp((t - SW_START) / (SW_END - SW_START)));
+  sw.style.strokeDashoffset = swL * (1 - sp);
+  sw.style.opacity = t >= SW_START ? 1 : 0;
+  const q = clamp((t - SP_T) / 1.4), flash = q < .35 ? q/.35 : Math.max(0, 1 - (q-.35)/.65);
+  const sc = 0.2 + 1.1 * Math.sin(Math.min(q,1) * Math.PI * .9);
+  spark.setAttribute("opacity", flash);
+  spark.setAttribute("transform", `translate(${endPt.x} ${endPt.y}) rotate(${q*40}) scale(${Math.max(sc,.01)})`);
+  const z = 1 + 0.035 * (t / window.DURATION);
+  document.getElementById("cam").setAttribute("transform", `translate(960 540) scale(${z}) translate(-960 -540)`);
+  document.getElementById("fade").setAttribute("opacity", clamp((t - (window.DURATION - 1)) / 1.0));
+};
+window.render(0);
+</script></body></html>

@@ -1,0 +1,23 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1280
+PlayResY: 720
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: AR,DejaVu Sans,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,8,40,40,62,1
+Style: EN,DejaVu Sans,28,&H0080D8FF,&H00FFFFFF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2.5,1,8,40,40,95,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.08,0:00:01.75,AR,,0,0,0,,هذا شارع المتنبي يا جدو
+Dialogue: 0,0:00:00.08,0:00:01.75,EN,,0,0,0,,This is Al-Mutanabbi Street, Grandpa.
+Dialogue: 0,0:00:01.84,0:00:03.25,AR,,0,0,0,,كل كتاب هنا له حكاية
+Dialogue: 0,0:00:01.84,0:00:03.25,EN,,0,0,0,,Every book here has a story.
+Dialogue: 0,0:00:03.36,0:00:05.45,AR,,0,0,0,,جدو، شوف شلون هذا الكتاب! أريده
+Dialogue: 0,0:00:03.36,0:00:05.45,EN,,0,0,0,,Grandpa, look at this book! I want it.
+Dialogue: 0,0:00:05.58,0:00:07.05,AR,,0,0,0,,أنت كل مرة تريد كل شيء
+Dialogue: 0,0:00:05.58,0:00:07.05,EN,,0,0,0,,Every time, you want everything.
+Dialogue: 0,0:00:07.12,0:00:09.55,AR,,0,0,0,,خذه، وبعدين نشرب شاي عند الشابندر
+Dialogue: 0,0:00:07.12,0:00:09.55,EN,,0,0,0,,Take it, and then we'll have tea at Al-Shabandar Café.
