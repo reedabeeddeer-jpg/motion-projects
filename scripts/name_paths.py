@@ -1,5 +1,5 @@
 """Shape Arabic text with HarfBuzz and export each glyph contour as an SVG path (for Trim Path animation).
-Usage: python3 scripts/name_paths.py FONT.ttf out.json
+Usage: python3 scripts/name_paths.py FONT.ttf out.json [LINE ...]
 """
 import sys, json, re
 import uharfbuzz as hb
@@ -8,8 +8,8 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontTools.pens.boundsPen import BoundsPen
 
-LINES = ["أبا القاسم", "محمد رائد عبد الزهرة"]
 font_path, out = sys.argv[1], sys.argv[2]
+LINES = sys.argv[3:] or ["أبا القاسم", "محمد رائد عبد الزهرة"]
 tt = TTFont(font_path); gs = tt.getGlyphSet(); upm = tt["head"].unitsPerEm
 blob = hb.Blob.from_file_path(font_path); face = hb.Face(blob); font = hb.Font(face)
 
