@@ -1,0 +1,556 @@
+{
+ "fps": 30,
+ "width": 1920,
+ "height": 1080,
+ "speechFrames": 1158,
+ "durationInFrames": 1278,
+ "cuts": [
+  {
+   "from": 0,
+   "to": 137
+  },
+  {
+   "from": 137,
+   "to": 163
+  },
+  {
+   "from": 163,
+   "to": 208
+  },
+  {
+   "from": 208,
+   "to": 299
+  },
+  {
+   "from": 299,
+   "to": 352
+  },
+  {
+   "from": 352,
+   "to": 474
+  },
+  {
+   "from": 474,
+   "to": 597
+  },
+  {
+   "from": 597,
+   "to": 738
+  },
+  {
+   "from": 738,
+   "to": 826
+  },
+  {
+   "from": 826,
+   "to": 863
+  },
+  {
+   "from": 863,
+   "to": 887
+  },
+  {
+   "from": 887,
+   "to": 919
+  },
+  {
+   "from": 919,
+   "to": 974
+  },
+  {
+   "from": 974,
+   "to": 1019
+  },
+  {
+   "from": 1019,
+   "to": 1158
+  }
+ ],
+ "captions": [
+  {
+   "words": [
+    {
+     "text": "السلام",
+     "from": 4,
+     "to": 16
+    },
+    {
+     "text": "عليكم",
+     "from": 18,
+     "to": 30
+    },
+    {
+     "text": "ورحمة",
+     "from": 30,
+     "to": 40
+    },
+    {
+     "text": "الله",
+     "from": 40,
+     "to": 44
+    },
+    {
+     "text": "وبركاته",
+     "from": 45,
+     "to": 60
+    }
+   ],
+   "en": "Peace be upon you, and God's mercy and blessings",
+   "from": 4,
+   "to": 61
+  },
+  {
+   "words": [
+    {
+     "text": "شلونكم؟",
+     "from": 61,
+     "to": 72
+    },
+    {
+     "text": "شلون",
+     "from": 75,
+     "to": 80
+    },
+    {
+     "text": "صحتكم",
+     "from": 82,
+     "to": 94
+    },
+    {
+     "text": "أعزائي",
+     "from": 95,
+     "to": 106
+    },
+    {
+     "text": "المشاهدين",
+     "from": 106,
+     "to": 120
+    },
+    {
+     "text": "الكرام؟",
+     "from": 120,
+     "to": 133
+    }
+   ],
+   "en": "How are you all? How's your health, dear viewers?",
+   "from": 61,
+   "to": 141
+  },
+  {
+   "words": [
+    {
+     "text": "اليوم",
+     "from": 141,
+     "to": 159
+    },
+    {
+     "text": "راح",
+     "from": 166,
+     "to": 171
+    },
+    {
+     "text": "نسوي",
+     "from": 174,
+     "to": 184
+    },
+    {
+     "text": "مقارنة",
+     "from": 185,
+     "to": 205
+    }
+   ],
+   "en": "Today, we're going to make a comparison",
+   "from": 141,
+   "to": 210
+  },
+  {
+   "words": [
+    {
+     "text": "بين",
+     "from": 210,
+     "to": 219
+    },
+    {
+     "text": "Claude",
+     "from": 222,
+     "to": 232
+    },
+    {
+     "text": "Code",
+     "from": 234,
+     "to": 249
+    },
+    {
+     "text": "والـ",
+     "from": 265,
+     "to": 271
+    },
+    {
+     "text": "ChatGPT",
+     "from": 272,
+     "to": 294
+    }
+   ],
+   "en": "between Claude Code and ChatGPT",
+   "from": 210,
+   "to": 305
+  },
+  {
+   "words": [
+    {
+     "text": "راح",
+     "from": 305,
+     "to": 309
+    },
+    {
+     "text": "نبلش",
+     "from": 313,
+     "to": 324
+    },
+    {
+     "text": "بـ",
+     "from": 325,
+     "to": 328
+    },
+    {
+     "text": "Claude",
+     "from": 329,
+     "to": 336
+    },
+    {
+     "text": "Code",
+     "from": 338,
+     "to": 347
+    }
+   ],
+   "en": "Let's start with Claude Code",
+   "from": 305,
+   "to": 357
+  },
+  {
+   "words": [
+    {
+     "text": "أولًا:",
+     "from": 357,
+     "to": 374
+    },
+    {
+     "text": "يفحص",
+     "from": 378,
+     "to": 390
+    },
+    {
+     "text": "الملفات",
+     "from": 391,
+     "to": 411
+    },
+    {
+     "text": "والفيديوهات",
+     "from": 412,
+     "to": 436
+    },
+    {
+     "text": "والصور",
+     "from": 437,
+     "to": 451
+    },
+    {
+     "text": "والصوت",
+     "from": 453,
+     "to": 469
+    }
+   ],
+   "en": "First: it inspects files, videos, images and audio",
+   "from": 357,
+   "to": 478
+  },
+  {
+   "words": [
+    {
+     "text": "ثانيًا:",
+     "from": 478,
+     "to": 498
+    },
+    {
+     "text": "ينشئ",
+     "from": 503,
+     "to": 527
+    },
+    {
+     "text": "script",
+     "from": 531,
+     "to": 555
+    },
+    {
+     "text": "motion",
+     "from": 562,
+     "to": 573
+    },
+    {
+     "text": "graphic",
+     "from": 578,
+     "to": 593
+    }
+   ],
+   "en": "Second: it creates a motion graphics script",
+   "from": 478,
+   "to": 602
+  },
+  {
+   "words": [
+    {
+     "text": "ثالثًا:",
+     "from": 602,
+     "to": 617
+    },
+    {
+     "text": "ينفذ",
+     "from": 622,
+     "to": 636
+    },
+    {
+     "text": "المهام",
+     "from": 638,
+     "to": 661
+    },
+    {
+     "text": "البرمجية",
+     "from": 662,
+     "to": 688
+    },
+    {
+     "text": "ويختبر",
+     "from": 689,
+     "to": 712
+    },
+    {
+     "text": "النتائج",
+     "from": 713,
+     "to": 734
+    }
+   ],
+   "en": "Third: it executes coding tasks and tests the results",
+   "from": 602,
+   "to": 742
+  },
+  {
+   "words": [
+    {
+     "text": "وهسه",
+     "from": 742,
+     "to": 754
+    },
+    {
+     "text": "راح",
+     "from": 756,
+     "to": 760
+    },
+    {
+     "text": "نبلش",
+     "from": 762,
+     "to": 784
+    },
+    {
+     "text": "عن",
+     "from": 786,
+     "to": 795
+    },
+    {
+     "text": "الـ",
+     "from": 796,
+     "to": 801
+    },
+    {
+     "text": "ChatGPT",
+     "from": 801,
+     "to": 822
+    }
+   ],
+   "en": "Now, let's move on to ChatGPT",
+   "from": 742,
+   "to": 830
+  },
+  {
+   "words": [
+    {
+     "text": "أولًا:",
+     "from": 830,
+     "to": 841
+    },
+    {
+     "text": "يخطط",
+     "from": 846,
+     "to": 862
+    },
+    {
+     "text": "المشاهد",
+     "from": 865,
+     "to": 885
+    },
+    {
+     "text": "السينمائية",
+     "from": 889,
+     "to": 915
+    }
+   ],
+   "en": "First: it plans cinematic scenes",
+   "from": 830,
+   "to": 923
+  },
+  {
+   "words": [
+    {
+     "text": "ثانيًا:",
+     "from": 923,
+     "to": 938
+    },
+    {
+     "text": "يكتب",
+     "from": 948,
+     "to": 958
+    },
+    {
+     "text": "prompt",
+     "from": 962,
+     "to": 971
+    },
+    {
+     "text": "والأوامر",
+     "from": 976,
+     "to": 994
+    },
+    {
+     "text": "الجاهزة",
+     "from": 996,
+     "to": 1015
+    }
+   ],
+   "en": "Second: it writes prompts and ready-made commands",
+   "from": 923,
+   "to": 1022
+  },
+  {
+   "words": [
+    {
+     "text": "ثالثًا:",
+     "from": 1022,
+     "to": 1046
+    },
+    {
+     "text": "يساعدك",
+     "from": 1050,
+     "to": 1069
+    },
+    {
+     "text": "على",
+     "from": 1071,
+     "to": 1077
+    },
+    {
+     "text": "حل",
+     "from": 1079,
+     "to": 1085
+    },
+    {
+     "text": "الأخطاء",
+     "from": 1086,
+     "to": 1102
+    },
+    {
+     "text": "وتحسين",
+     "from": 1104,
+     "to": 1127
+    },
+    {
+     "text": "الحركات",
+     "from": 1129,
+     "to": 1153
+    }
+   ],
+   "en": "Third: it helps you fix errors and improve animations",
+   "from": 1022,
+   "to": 1153
+  }
+ ],
+ "sections": {
+  "versus": 210,
+  "claude": 305,
+  "chatgpt": 742
+ },
+ "points": [
+  {
+   "side": "claude",
+   "n": 1,
+   "word": 25,
+   "icon": "files",
+   "ar": "يفحص الملفات والفيديو والصور والصوت",
+   "en": "Inspects files, video, images & audio",
+   "from": 357
+  },
+  {
+   "side": "claude",
+   "n": 2,
+   "word": 31,
+   "icon": "motion",
+   "ar": "ينشئ سكربت موشن جرافيك",
+   "en": "Builds motion-graphics scripts",
+   "from": 478
+  },
+  {
+   "side": "claude",
+   "n": 3,
+   "word": 36,
+   "icon": "code",
+   "ar": "ينفذ المهام البرمجية ويختبر النتائج",
+   "en": "Runs coding tasks & tests results",
+   "from": 602
+  },
+  {
+   "side": "chatgpt",
+   "n": 1,
+   "word": 48,
+   "icon": "film",
+   "ar": "يخطط للمشاهد السينمائية",
+   "en": "Plans cinematic scenes",
+   "from": 830
+  },
+  {
+   "side": "chatgpt",
+   "n": 2,
+   "word": 55,
+   "icon": "prompt",
+   "ar": "يكتب البرومبت والأوامر الجاهزة",
+   "en": "Writes prompts & ready commands",
+   "from": 923
+  },
+  {
+   "side": "chatgpt",
+   "n": 3,
+   "word": 60,
+   "icon": "wrench",
+   "ar": "يساعدك بحل الأخطاء وتحسين الحركات",
+   "en": "Fixes errors & polishes motion",
+   "from": 1022
+  }
+ ],
+ "motion": [
+  {
+   "frame": 29,
+   "x": 0.44957546108861896,
+   "y": 0.45501574448942866,
+   "strength": 0.03322723765432099
+  },
+  {
+   "frame": 225,
+   "x": 0.26721199727334694,
+   "y": 0.4054665606301598,
+   "strength": 0.04405864197530865
+  },
+  {
+   "frame": 268,
+   "x": 0.6744537601626016,
+   "y": 0.4522583559168925,
+   "strength": 0.0425925925925926
+  }
+ ]
+}
