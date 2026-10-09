@@ -27,3 +27,14 @@ npm run render   # out/logo-reveal.mp4
 ```
 
 النصوص قابلة للتعديل من `defaultProps` في `src/Root.tsx`. لاستخدام Chromium مثبت مسبقاً بدل التنزيل: اضبط `REMOTION_BROWSER` على مسار المتصفح.
+
+## handwriting (الحمد لله رب العالمين)
+
+فيديو موشن جرافيك (1920×1080، 30fps، 10 ثوانٍ): العبارة تُكتب بقلم قصب بخط «عارف رقعة» بحبر ذهبي مع لمعان وصوت خشخشة القلم.
+
+```bash
+python3 scripts/handwriting_audio.py
+node scripts/render.mjs --src src/handwriting.html --audio output/handwriting.wav --out output/handwriting.mp4
+```
+
+Font: Aref Ruqaa (SIL OFL).

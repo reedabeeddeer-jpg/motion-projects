@@ -12,11 +12,12 @@ const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[
 const fps = Number(opt("--fps", 30));
 const out = path.resolve(root, opt("--out", "output/motion.mp4"));
 const audio = path.resolve(root, opt("--audio", "output/soundtrack.wav"));
+const src = opt("--src", "src/motion.html");
 fs.mkdirSync(path.dirname(out), { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
-await page.goto(pathToFileURL(path.join(root, "src/motion.html")).href);
+await page.goto(pathToFileURL(path.join(root, src)).href);
 await page.evaluate(() => window.ready);
 const duration = await page.evaluate(() => window.DURATION);
 const frames = Math.round(duration * fps);
