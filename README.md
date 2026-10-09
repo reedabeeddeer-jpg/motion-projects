@@ -191,3 +191,12 @@ node scripts/render.mjs --src src/handwriting.html --audio output/handwriting.wa
 ```
 
 Font: Aref Ruqaa (SIL OFL).
+
+## typing (كتابة حرف حرف + صوت رجل)
+
+نفس العبارة تُكتب حرفاً حرفاً مع مؤشر وامض، مع قراءة بصوت رجل (ElevenLabs، صوت Omar) مرتين.
+
+```bash
+python3 scripts/typing_audio.py
+node scripts/render.mjs --src src/typing.html --audio output/typing.wav --out output/typing.mp4
+```
