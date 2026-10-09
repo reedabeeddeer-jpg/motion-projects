@@ -203,11 +203,12 @@ node scripts/render.mjs --src src/typing.html --audio output/typing.wav --out ou
 
 ## sahib-alzaman (يا صاحب الزمان)
 
-نفس طريقة سكربت `signature_write_on.jsx` (Trim Path لكل حرف بترتيب الكتابة من اليمين لليسار، ثم يتحول الخط إلى تعبئة بيضاء) لكن بدون After Effects: تُستخرج مسارات الحروف من خط «عارف رقعة» بـ HarfBuzz ثم تُحرَّك كـ stroke-dashoffset. الفيديو 10 ثوانٍ، 1920×1080، مع خط تحت العبارة ولمعة وصوت قلم.
+نفس فكرة سكربت `signature_write_on.jsx`: خط أبيض (Stroke) يمشي على مركز كل حرف كقلم، وقيمة Trim Paths End تتحرك من 0 إلى 100% لكل مقطع بالتتابع (من اليمين لليسار)، والخط مقصوص بشكل الحرف فيحتفظ بخط الرقعة. النقاط تظهر بعد الحروف. في النهاية خط تحت العبارة ولمعة وصوت قلم. 10 ثوانٍ، 1920×1080.
 
 ```bash
-pip install uharfbuzz fonttools brotli playwright
-python3 scripts/name_paths.py FONT.ttf src/sahib_paths.json "يا صاحب الزمان"   # FONT.ttf = aref-ruqaa woff2 محوّل إلى ttf
-python3 scripts/sahib_audio.py output/sahib-alzaman.wav
-python3 scripts/render_name.py output/sahib-alzaman.wav output/sahib-alzaman.mp4 --html src/sahib-alzaman.html --json src/sahib_paths.json --dur 10
+pip install uharfbuzz fonttools brotli playwright numpy scipy scikit-image
+python3 scripts/name_paths.py FONT.ttf src/sahib_paths.json "يا صاحب الزمان"   # FONT.ttf = aref-ruqaa-arabic-700 woff2 محوّل إلى ttf
+python3 scripts/centerline_paths.py src/sahib_paths.json src/sahib_centerline.json   # مسارات القلم (skeleton) + التوقيت
+python3 scripts/sahib_audio.py output/sahib.wav
+python3 scripts/render_name.py output/sahib.wav output/sahib-alzaman.mp4 --html src/sahib-pen.html --json src/sahib_centerline.json --dur 10
 ```
