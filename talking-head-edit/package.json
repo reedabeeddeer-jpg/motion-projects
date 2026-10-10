@@ -1,0 +1,21 @@
+{
+  "name": "talking-head-edit",
+  "private": true,
+  "scripts": {
+    "prepare-footage": "python3 scripts/prepare.py",
+    "audio": "python3 scripts/sfx.py",
+    "studio": "remotion studio",
+    "render": "remotion render TalkingHead out/claude-vs-chatgpt.mp4",
+    "still": "remotion still TalkingHead out/still.png"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.533",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "4.0.533"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "typescript": "^5.9.3"
+  }
+}

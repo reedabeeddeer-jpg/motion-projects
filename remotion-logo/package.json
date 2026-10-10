@@ -1,0 +1,20 @@
+{
+  "name": "remotion-logo",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render LogoReveal out/logo-reveal.mp4",
+    "render:text": "remotion render TextReveal out/text-reveal.mp4",
+    "render:bounce": "remotion render BounceText out/bounce-text.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.533",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.533"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>الحمد لله رب العالمين - كتابة بالقلم</title>
+<style>
+  @font-face { font-family: "Aref Ruqaa"; font-weight: 400; src: url(../assets/fonts/aref-ruqaa-arabic-400-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Aref Ruqaa"; font-weight: 700; src: url(../assets/fonts/aref-ruqaa-arabic-700-normal.woff2) format("woff2"); }
+  html, body { margin: 0; background: #0B0F1F; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, CX = W / 2;
+const DURATION = 10;
+const PHRASE = "الحمد لله رب العالمين";
+const WORDS = PHRASE.split(" ");
+// write windows per word [start, end] in seconds (shared with scripts/handwriting_audio.py)
+const WRITE = [[1.5, 3.2], [3.6, 4.5], [4.9, 5.7], [6.1, 7.7]];
+const END_WRITE = WRITE[WRITE.length - 1][1];
+const FONT = `700 220px "Aref Ruqaa"`;
+const BASE_Y = 590;
+const FEATHER = 36;
+
+const ctx = document.getElementById("c").getContext("2d");
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOut = k => 1 - Math.pow(1 - k, 3);
+const eInOut = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eSine = k => 0.5 - Math.cos(Math.PI * k) / 2;
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+function mk() { const c = document.createElement("canvas"); c.width = W; c.height = H; return c; }
+const inkGold = mk(), inkWhite = mk(), tmp = mk(), tmp2 = mk(), grain = mk(), measureCv = mk();
+
+let wordX = [];          // [rightEdge, leftEdge] per word
+let colY = new Float32Array(W);  // pen height (ink center) per column
+let inkL = 0, inkR = W;
+
+function setup() {
+  const m = measureCv.getContext("2d");
+  m.font = FONT; m.direction = "rtl";
+  const total = m.measureText(PHRASE).width;
+  const R = CX + total / 2;
+  inkL = CX - total / 2; inkR = R;
+  WORDS.forEach((_, i) => {
+    const before = i ? m.measureText(WORDS.slice(0, i).join(" ") + " ").width : 0;
+    const upto = m.measureText(WORDS.slice(0, i + 1).join(" ")).width;
+    wordX.push([R - before, R - upto]);
+  });
+
+  // text layers (gold gradient + white hot ink)
+  for (const [cv, white] of [[inkGold, false], [inkWhite, true]]) {
+    const g = cv.getContext("2d");
+    g.direction = "rtl"; g.font = FONT; g.textAlign = "center"; g.textBaseline = "alphabetic";
+    g.fillStyle = "#fff";
+    g.fillText(PHRASE, CX, BASE_Y);
+    g.globalCompositeOperation = "source-in";
+    if (white) { g.fillStyle = "#FFF8DC"; }
+    else {
+      const gr = g.createLinearGradient(0, BASE_Y - 230, 0, BASE_Y + 120);
+      gr.addColorStop(0, "#FFE9A8"); gr.addColorStop(0.55, "#F2B84B"); gr.addColorStop(1, "#C98A24");
+      g.fillStyle = gr;
+    }
+    g.fillRect(0, 0, W, H);
+  }
+
+  // column analysis for pen height
+  const d = inkGold.getContext("2d").getImageData(0, 0, W, H).data;
+  const raw = new Float32Array(W).fill(NaN);
+  for (let x = Math.floor(inkL) - 4; x < Math.ceil(inkR) + 4; x++) {
+    if (x < 0 || x >= W) continue;
+    let sum = 0, n = 0;
+    for (let y = 250; y < 800; y++) if (d[(y * W + x) * 4 + 3] > 120) { sum += y; n++; }
+    if (n) raw[x] = sum / n;
+  }
+  let last = BASE_Y - 40;
+  for (let x = W - 1; x >= 0; x--) { if (!isNaN(raw[x])) last = raw[x]; else raw[x] = last; }
+  const R2 = 28;
+  for (let x = 0; x < W; x++) {
+    let s = 0, n = 0;
+    for (let k = -R2; k <= R2; k++) { const xx = x + k; if (xx >= 0 && xx < W) { s += raw[xx]; n++; } }
+    colY[x] = s / n;
+  }
+
+  // paper grain
+  const gg = grain.getContext("2d"), r = rng(11);
+  for (let i = 0; i < 9000; i++) {
+    gg.fillStyle = `rgba(255,255,255,${0.02 + r() * 0.04})`;
+    gg.fillRect(r() * W, r() * H, 1 + r() * 1.5, 1 + r() * 1.5);
+  }
+}
+
+// ---- pen timeline ----
+// returns { x (reveal edge), lift (0 = on paper, 1 = in air), speed }
+function penState(t) {
+  const first = WRITE[0][0];
+  const startX = wordX[0][0] + 6;
+  if (t < first) return { x: startX, lift: 1, writing: false, started: false };
+  for (let i = 0; i < WRITE.length; i++) {
+    const [s, e] = WRITE[i];
+    const [rx, lx] = wordX[i];
+    if (t >= s && t <= e) {
+      const k = (t - s) / (e - s);
+      // lift eases to 0 right at word start and back up at the end
+      const lift = 1 - eSine(clamp(k / 0.06)) + eSine(clamp((k - 0.94) / 0.06)) * 0 ;
+      return { x: lerp(rx + 6, lx - 4, eSine(lerp(0, 1, k) * 0.55 + k * 0.45)), lift: clamp(lift), writing: true, started: true };
+    }
+    if (i < WRITE.length - 1 && t > e && t < WRITE[i + 1][0]) {
+      const k = (t - e) / (WRITE[i + 1][0] - e);
+      const from = lx - 4, to = wordX[i + 1][0] + 6;
+      return { x: lerp(from, to, eInOut(k)), lift: Math.sin(Math.PI * clamp(k * 1.0)) * 0.9 + 0.1 * eSine(k), writing: false, started: true };
+    }
+  }
+  // after writing: pen drifts away
+  const lx = wordX[wordX.length - 1][1] - 4;
+  const k = prog(t, END_WRITE, 1.1);
+  return { x: lx - eOut(k) * 40, lift: eOut(k), writing: false, started: true, leaving: k };
+}
+const revealEdge = t => {
+  if (t >= END_WRITE) return -9999;
+  const p = penState(t);
+  return p.x;
+};
+
+function nibPos(t) {
+  const p = penState(t);
+  const ix = clamp(Math.round(p.x), 0, W - 1);
+  const wob = p.writing ? Math.sin(t * 38) * 6 + Math.sin(t * 17.3) * 5 : 0;
+  let y = colY[ix] + wob;
+  let x = p.x;
+  // pen entrance from the top right
+  const e = prog(t, 0.4, 1.1);
+  if (t < WRITE[0][0]) {
+    const ex = eInOut(e);
+    x = lerp(W + 140, x, ex);
+    y = lerp(-120, y - 60, ex) ;
+  } else if (p.leaving !== undefined) {
+    const k = eOut(p.leaving);
+    x = x - k * 120; y = y - k * 520;
+  }
+  y -= p.lift * 70;
+  return { x, y, lift: p.lift, writing: p.writing };
+}
+
+// ---- drawing ----
+function drawBackground(t) {
+  const g = ctx.createRadialGradient(CX, 520, 100, CX, 540, 1250);
+  g.addColorStop(0, "#1A2145"); g.addColorStop(0.55, "#0F1530"); g.addColorStop(1, "#070A16");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // slow-rotating eight-point star ring
+  ctx.save();
+  ctx.translate(CX, 540);
+  ctx.rotate(t * 0.025);
+  ctx.strokeStyle = "rgba(242,184,75,0.06)"; ctx.lineWidth = 2;
+  for (const R of [520, 700, 880]) {
+    for (let k = 0; k < 2; k++) {
+      ctx.save(); ctx.rotate(k * Math.PI / 8 * 2);
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4 * 1;
+        ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
+      }
+      ctx.closePath();
+      ctx.restore();
+      ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.97, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+
+  // floating dust
+  const r = rng(5);
+  for (let i = 0; i < 60; i++) {
+    const x0 = r() * W, y0 = r() * H, s = 1 + r() * 2, v = 6 + r() * 14, ph = r() * 6.28;
+    const y = (y0 - t * v + H * 4) % H;
+    ctx.globalAlpha = 0.15 + 0.25 * Math.abs(Math.sin(t * 0.8 + ph));
+    ctx.fillStyle = "#F2B84B";
+    ctx.beginPath(); ctx.arc(x0 + Math.sin(t * 0.4 + ph) * 14, y, s, 0, 6.283); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.drawImage(grain, 0, 0);
+}
+
+function drawFrame(t) {
+  const a = prog(t, 0.2, 1.0);
+  ctx.save();
+  ctx.globalAlpha = eOut(a);
+  const y0 = 150, y1 = H - 150;
+  ctx.strokeStyle = "rgba(242,184,75,0.55)"; ctx.lineWidth = 2;
+  const len = eOut(a) * 520;
+  for (const y of [y0, y1]) {
+    ctx.beginPath(); ctx.moveTo(CX - len, y); ctx.lineTo(CX + len, y); ctx.stroke();
+    ctx.save(); ctx.translate(CX, y); ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = "#F2B84B"; ctx.fillRect(-7, -7, 14, 14); ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawInk(t) {
+  const edge = revealEdge(t);
+  const done = t >= END_WRITE;
+  const c2 = tmp.getContext("2d");
+  c2.globalCompositeOperation = "source-over";
+  c2.clearRect(0, 0, W, H);
+  if (t < WRITE[0][0]) return;
+  c2.drawImage(inkGold, 0, 0);
+  if (!done) {
+    c2.globalCompositeOperation = "destination-in";
+    const g = c2.createLinearGradient(edge, 0, edge + FEATHER, 0);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,1)");
+    c2.fillStyle = g; c2.fillRect(0, 0, W, H);   // destination-in clears outside the shape, so cover the full canvas
+  }
+  // wet-ink highlight band behind the nib
+  const w2 = tmp2.getContext("2d");
+  w2.globalCompositeOperation = "source-over"; w2.clearRect(0, 0, W, H);
+  w2.drawImage(inkWhite, 0, 0);
+  w2.globalCompositeOperation = "destination-in";
+  // hot ink fades after the last word too
+  const hot = done ? 1 - prog(t, END_WRITE, 0.9) : 1;
+  const band = done ? 1400 : 260;
+  const ex = done ? inkL - 100 : edge;
+  const gh = w2.createLinearGradient(ex, 0, ex + band, 0);
+  gh.addColorStop(0, "rgba(0,0,0,0)"); gh.addColorStop(0.08, "rgba(0,0,0,1)"); gh.addColorStop(1, "rgba(0,0,0,0)");
+  w2.fillStyle = gh; w2.fillRect(0, 0, W, H);
+  // keep the highlight inside the already-revealed area
+  w2.globalCompositeOperation = "destination-in";
+  w2.drawImage(tmp, 0, 0);
+
+  const glow = 0.5 + 0.5 * prog(t, END_WRITE, 1.2);
+  ctx.save();
+  ctx.shadowColor = `rgba(242,184,75,${0.55 * glow})`; ctx.shadowBlur = 36;
+  ctx.drawImage(tmp, 0, 0);
+  ctx.restore();
+  ctx.drawImage(tmp, 0, 0);
+  ctx.globalAlpha = hot;
+  ctx.drawImage(tmp2, 0, 0);
+  ctx.globalAlpha = 1;
+}
+
+function drawUnderline(t) {
+  const s = END_WRITE + 0.15, d = 1.2;
+  const k = eInOut(prog(t, s, d));
+  if (k <= 0) return;
+  const x1 = inkR - 20, x2 = inkL + 20, y = BASE_Y + 105;
+  const path = new Path2D();
+  path.moveTo(x1, y);
+  path.bezierCurveTo(x1 - 300, y + 26, CX + 100, y - 24, CX - 40, y + 4);
+  path.bezierCurveTo(CX - 220, y + 28, x2 + 120, y - 18, x2, y + 6);
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.setLineDash([k * 1600, 1700]);
+  ctx.strokeStyle = "rgba(242,184,75,0.35)"; ctx.lineWidth = 12; ctx.filter = "blur(6px)";
+  ctx.stroke(path);
+  ctx.filter = "none";
+  const g = ctx.createLinearGradient(x1, 0, x2, 0);
+  g.addColorStop(0, "#FFE9A8"); g.addColorStop(1, "#E0A63A");
+  ctx.strokeStyle = g; ctx.lineWidth = 5; ctx.stroke(path);
+  ctx.restore();
+}
+
+function drawPen(t) {
+  return; // no pen: the text writes itself
+  if (t < 0.4) return;
+  const n = nibPos(t);
+  const leave = t > END_WRITE + 1.1 ? 1 : 0;
+  if (leave) return;
+  ctx.save();
+  ctx.translate(n.x, n.y);
+  const tilt = (24 + (n.writing ? Math.sin(t * 6) * 2.5 : 0) - n.lift * 6) * Math.PI / 180;
+  ctx.rotate(tilt);
+  // shadow on paper
+  if (n.lift < 0.6) {
+    ctx.save(); ctx.globalAlpha = 0.25 * (1 - n.lift); ctx.fillStyle = "#000"; ctx.filter = "blur(8px)";
+    ctx.beginPath(); ctx.ellipse(10, 12, 18, 6, 0.4, 0, 6.283); ctx.fill(); ctx.restore();
+  }
+  const L = 330;
+  // reed body
+  const body = ctx.createLinearGradient(-16, 0, 16, 0);
+  body.addColorStop(0, "#3a2414"); body.addColorStop(0.35, "#8a5a2e"); body.addColorStop(0.55, "#c48a4a"); body.addColorStop(1, "#4a2d17");
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-2, 0);                  // nib tip
+  ctx.lineTo(-7, -34);
+  ctx.lineTo(-15, -L);
+  ctx.quadraticCurveTo(0, -L - 12, 15, -L);
+  ctx.lineTo(10, -34);
+  ctx.lineTo(4, 0);
+  ctx.closePath(); ctx.fill();
+  // wet ink on the nib
+  ctx.fillStyle = "#1a1a1f";
+  ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(-6, -26); ctx.lineTo(8, -26); ctx.lineTo(4, 0); ctx.closePath(); ctx.fill();
+  // split in the nib
+  ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(1, -2); ctx.lineTo(1, -20); ctx.stroke();
+  // gold ring + highlight
+  ctx.fillStyle = "#F2B84B";
+  ctx.fillRect(-9.5, -78, 19, 7);
+  ctx.fillRect(-13.5, -L + 60, 27, 6);
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  ctx.fillRect(3, -L + 10, 3, L - 50);
+  ctx.restore();
+}
+
+function drawSparks(t) {
+  const r = rng(99);
+  const N = 520, span = END_WRITE - WRITE[0][0];
+  for (let i = 0; i < N; i++) {
+    const tb = WRITE[0][0] + r() * span;
+    const ang = r() * 6.283, sp = 30 + r() * 140, life = 0.5 + r() * 0.7, sz = 1 + r() * 2.6;
+    const age = t - tb;
+    if (age < 0 || age > life) continue;
+    const p = penState(tb);
+    if (!p.writing) continue;
+    const n = nibPos(tb);
+    const k = age / life;
+    const x = n.x + Math.cos(ang) * sp * eOut(k) * 0.8;
+    const y = n.y + Math.sin(ang) * sp * eOut(k) * 0.8 + 50 * k * k;
+    ctx.globalAlpha = (1 - k) * 0.9;
+    ctx.fillStyle = r() > 0.5 ? "#FFE9A8" : "#FFB84B";
+    ctx.beginPath(); ctx.arc(x, y, sz * (1 - k * 0.5), 0, 6.283); ctx.fill();
+  }
+  // finale burst of light
+  const fb = prog(t, END_WRITE + 0.2, 1.6);
+  if (fb > 0 && fb < 1) {
+    const r2 = rng(1234);
+    for (let i = 0; i < 90; i++) {
+      const x = lerp(inkR - 20, inkL + 20, r2()), y = BASE_Y + 105 + (r2() - 0.5) * 20;
+      const ang = -Math.PI / 2 + (r2() - 0.5) * 2, sp = 60 + r2() * 220, d = fb;
+      ctx.globalAlpha = (1 - d) * 0.8; ctx.fillStyle = "#FFE9A8";
+      ctx.beginPath(); ctx.arc(x + Math.cos(ang) * sp * d, y + Math.sin(ang) * sp * d, 1.5 + r2() * 2, 0, 6.283); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function render(t) {
+  drawBackground(t);
+  drawFrame(t);
+  // gentle breathing of the finished text
+  const settle = prog(t, END_WRITE + 0.5, 1.5);
+  ctx.save();
+  if (settle > 0) {
+    const s = 1 + 0.012 * Math.sin(t * 1.2) * settle;
+    ctx.translate(CX, BASE_Y - 60); ctx.scale(s, s); ctx.translate(-CX, -(BASE_Y - 60));
+  }
+  drawInk(t);
+  drawUnderline(t);
+  ctx.restore();
+  drawSparks(t);
+  drawPen(t);
+  // fade in / out
+  const fin = 1 - prog(t, 0, 0.5), fout = prog(t, DURATION - 0.6, 0.6);
+  ctx.fillStyle = `rgba(7,10,22,${Math.max(fin, fout)})`; ctx.fillRect(0, 0, W, H);
+}
+
+window.DURATION = DURATION;
+window.WRITE = WRITE;
+window.render = render;
+window.ready = document.fonts.load(FONT, PHRASE).then(() => { setup(); render(0); return true; });
+</script>
+</body>
+</html>
