@@ -22,7 +22,10 @@
     "cyber:render": "node scripts/render.mjs --src src/cyber.html --audio output/cyber-soundtrack.wav --out output/cyber.mp4",
     "compare:audio": "python3 scripts/compare_soundtrack.py",
     "compare:preview": "node scripts/render.mjs --src src/compare.html --preview --times 1.2,2.5,5.5,8.8,12.8,17.5,20.5,23.8",
-    "compare:render": "node scripts/render.mjs --src src/compare.html --audio output/compare-soundtrack.wav --out output/compare.mp4"
+    "compare:render": "node scripts/render.mjs --src src/compare.html --audio output/compare-soundtrack.wav --out output/compare.mp4",
+    "clasico:audio": "python3 scripts/clasico_soundtrack.py",
+    "clasico:preview": "node scripts/render.mjs --src src/clasico.html --preview --times 0.9,1.8,3.1,4.0,6.0,8.4,10.5,13.0,14.2",
+    "clasico:render": "node scripts/render.mjs --src src/clasico.html --audio output/clasico-soundtrack.wav --out output/clasico.mp4"
   },
   "devDependencies": {
     "playwright": "1.56.1"

@@ -261,3 +261,17 @@ npm run render   # out/claude-vs-chatgpt.mp4
 ```
 
 نقاط القص والترجمات وتوقيت الجرافيك في أعلى `scripts/prepare.py`، والتصميم في `src/TalkingHead.tsx`.
+
+## الكلاسيكو: ريال مدريد ضد برشلونة (15 ثانية، 1920×1080)
+
+إعلان مباراة: كشافات ملعب تضيء، عنوان «الكلاسيكو» بالذهبي، ثم مواجهة الشعارين مع VS، وبطاقات الموعد والساعة والقناة، وختام «لا تفوّتوا المباراة!». الصوت مولّد برمجياً: صفارة حكم، هتاف جمهور، طبول ومؤثرات.
+
+- `src/clasico.html`: الأنيميشن. تفاصيل المباراة (التاريخ، الساعة، القناة) في `MATCH` أعلى السكربت.
+- `assets/clasico/`: شعارا الناديين بعد إزالة الخلفية البيضاء عبر `scripts/cutout_crest.py`.
+- `scripts/clasico_soundtrack.py`: الصوت في `output/clasico-soundtrack.wav`.
+
+```bash
+npm run clasico:audio
+npm run clasico:render    # output/clasico.mp4
+npm run clasico:preview   # صور ثابتة في output/stills/clasico
+```
