@@ -41,7 +41,8 @@ npm run cyber:preview   # صور ثابتة في output/stills/cyber
 فيديو موشن جرافيك (1920×1080، 30fps، 25 ثانية): مواجهة افتتاحية، بطاقات تعريف، 5 جولات مع لوحة نتائج، ثم النتيجة ونصيحة الاختيار.
 
 - `src/compare.html`: الأنيميشن. نصوص الجولات والحكم في كل جولة في مصفوفة `ROUNDS`.
-- `scripts/compare_soundtrack.py`: الموسيقى والمؤثرات في `output/compare-soundtrack.wav`.
+- `scripts/compare_soundtrack.py`: الموسيقى والمؤثرات في `output/compare-soundtrack.wav`، ويدمج معها التعليق الصوتي ويخفض الموسيقى تحته.
+- `output/voice/compare-vo.mp3`: التعليق الصوتي العربي من ElevenLabs (صوت Rawi – فصحى، نموذج eleven_multilingual_v2). كل جملة تُقصّ وتوضع على مشهدها حسب `VO_LINES`.
 
 ```bash
 npm run compare:audio

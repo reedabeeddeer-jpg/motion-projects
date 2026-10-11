@@ -1,4 +1,5 @@
 """Synthesizes the soundtrack for src/compare.html (25 s, 120 BPM), timed to its cues."""
+import subprocess
 import wave
 from pathlib import Path
 
@@ -7,7 +8,22 @@ import numpy as np
 SR = 44100
 DUR = 25.0
 BEAT = 0.5  # 120 BPM
-OUT = Path(__file__).resolve().parent.parent / "output" / "compare-soundtrack.wav"
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "output" / "compare-soundtrack.wav"
+# Arabic voice-over (ElevenLabs, voice "Rawi", eleven_multilingual_v2), one take with pauses between lines
+VO = ROOT / "output" / "voice" / "compare-vo.mp3"
+# (start, end) of each line inside VO -> time it lands in the video
+VO_LINES = [
+    ((0.00, 2.66), 0.40),    # تشات جي بي تي، ضد كلود! مقارنة سريعة
+    ((3.98, 6.39), 4.10),    # تشات جي بي تي من أوبن إيه آي، وكلود من أنثروبيك
+    ((7.58, 8.46), 7.75),    # الكتابة؟ كلود
+    ((9.62, 10.77), 9.90),   # البرمجة؟ تعادل
+    ((11.74, 13.32), 11.95), # الصور والصوت؟ تشات جي بي تي
+    ((14.31, 15.55), 14.25), # الملفات الطويلة؟ كلود
+    ((16.51, 18.23), 16.35), # التطبيقات والتكامل؟ تشات جي بي تي
+    ((19.19, 21.37), 18.90), # النتيجة: تعادل، والاختيار حسب احتياجك
+    ((22.27, 23.68), 22.60), # الأفضل، هو اللي يناسب شغلك
+]
 ROUND_START, ROUND_LEN = 7.4, 2.2
 WINS = ["claude", "tie", "gpt", "claude", "gpt"]
 
@@ -137,6 +153,26 @@ place(impact(), 23.0, 0.9)
 place(chime([440, 554.37, 659.25, 880], 1.8), 23.0, 1.0)
 
 mix = np.tanh(mix * 1.4) * 0.8
+
+if VO.exists():
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(VO), "-f", "s16le", "-ac", "1", "-ar", str(SR), "-"],
+                         check=True, capture_output=True).stdout
+    vo_src = np.frombuffer(raw, dtype=np.int16).astype(np.float64) / 32768
+    voice = np.zeros(n)
+    for (a, b), at in VO_LINES:
+        seg = vo_src[int(a * SR):int(b * SR)].copy()
+        fade = int(0.03 * SR)
+        seg[:fade] *= np.linspace(0, 1, fade)
+        seg[-fade:] *= np.linspace(1, 0, fade)
+        i = int(at * SR)
+        voice[i:i + len(seg)] += seg[: n - i]
+    # duck the music under the voice with a smoothed envelope
+    win = int(0.25 * SR)
+    level = np.convolve(np.abs(voice), np.ones(win) / win, mode="same")
+    duck = 1 - 0.6 * np.clip(level / 0.03, 0, 1)
+    mix = mix * duck * 0.8 + voice * 1.1
+    mix /= max(1.0, np.abs(mix).max() / 0.95)
+
 mix *= np.clip((DUR - t) / 1.2, 0, 1)
 pcm = (mix * 32767).astype(np.int16)
 stereo = np.column_stack([pcm, pcm]).ravel()
