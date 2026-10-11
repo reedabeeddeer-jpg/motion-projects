@@ -268,7 +268,8 @@ npm run render   # out/claude-vs-chatgpt.mp4
 
 - `src/clasico.html`: الأنيميشن. تفاصيل المباراة (التاريخ، الساعة، القناة) في `MATCH` أعلى السكربت.
 - `assets/clasico/`: شعارا الناديين بعد إزالة الخلفية البيضاء عبر `scripts/cutout_crest.py`.
-- `scripts/clasico_soundtrack.py`: الصوت في `output/clasico-soundtrack.wav`.
+- `scripts/clasico_soundtrack.py`: الصوت في `output/clasico-soundtrack.wav`، ويدمج معه التعليق الصوتي ويخفض الجمهور والموسيقى تحته.
+- `output/voice/clasico-vo.mp3`: التعليق الصوتي العربي من ElevenLabs (صوت Mohammad – فصحى، نموذج eleven_multilingual_v2). توقيت كل جملة وسرعتها في `VO_LINES`.
 
 ```bash
 npm run clasico:audio

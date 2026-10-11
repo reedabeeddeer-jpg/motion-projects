@@ -1,4 +1,5 @@
 """Synthesizes the soundtrack for src/clasico.html (15 s): stadium crowd, referee whistle, drums and cue hits."""
+import subprocess
 import wave
 from pathlib import Path
 
@@ -7,7 +8,17 @@ import numpy as np
 SR = 44100
 DUR = 15.0
 BEAT = 0.5  # 120 BPM
-OUT = Path(__file__).resolve().parent.parent / "output" / "clasico-soundtrack.wav"
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "output" / "clasico-soundtrack.wav"
+# Arabic voice-over (ElevenLabs, voice "Mohammad – Warm Arabic Commercial", eleven_multilingual_v2), one take
+VO = ROOT / "output" / "voice" / "clasico-vo.mp3"
+# (start, end) of each line inside VO, time it lands in the video, playback speed
+VO_LINES = [
+    ((0.00, 0.80), 1.05, 1.0),   # الكلاسيكو!
+    ((2.15, 5.24), 4.35, 1.0),   # ريال مدريد، ضد برشلونة! مواجهة القمة!
+    ((6.57, 12.51), 7.90, 1.2),  # الأحد، خمسة وعشرين أكتوبر، الساعة العاشرة مساءً، على قنوات بي إن سبورتس!
+    ((13.84, 15.33), 13.15, 1.1),  # لا تفوّتوا المباراة!
+]
 
 n = int(SR * DUR)
 t = np.arange(n) / SR
@@ -142,6 +153,25 @@ place(whistle(0.35), 14.45, 0.9)
 
 mix = np.column_stack([L, R])
 mix = np.tanh(mix * 1.3) * 0.85
+
+if VO.exists():
+    voice = np.zeros(n)
+    for (a, b), at, speed in VO_LINES:
+        raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-ss", str(a), "-to", str(b), "-i", str(VO),
+                              "-af", f"atempo={speed}", "-f", "s16le", "-ac", "1", "-ar", str(SR), "-"],
+                             check=True, capture_output=True).stdout
+        seg = np.frombuffer(raw, dtype=np.int16).astype(np.float64) / 32768
+        fade = int(0.03 * SR)
+        seg[:fade] *= np.linspace(0, 1, fade)
+        seg[-fade:] *= np.linspace(1, 0, fade)
+        i = int(at * SR)
+        voice[i:i + len(seg)] += seg[: n - i]
+    # duck crowd and music under the voice
+    win = int(0.25 * SR)
+    level = np.convolve(np.abs(voice), np.ones(win) / win, mode="same")
+    duck = 1 - 0.65 * np.clip(level / 0.03, 0, 1)
+    mix = mix * duck[:, None] * 0.8 + voice[:, None] * 1.15
+    mix /= max(1.0, np.abs(mix).max() / 0.95)
 mix *= np.clip((DUR - t) / 0.8, 0, 1)[:, None]
 mix *= np.clip(t / 0.15, 0, 1)[:, None]
 pcm = (mix * 32767).astype(np.int16)
