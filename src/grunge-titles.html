@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Grunge Titles</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #F4A9B7; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Paper-collage "grunge" title animation. Edit the names in TITLES below.
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- the names (each title = up to 3 stacked paper strips) ----------
+// paper: "purple" | "white" | "grey"   outline: text drawn as outline only
+const TITLES = [
+  { lines: [
+      { t: "محمد",      size: 112, paper: "white",  dx: -150, rot: -2.5 },
+      { t: "أبوالقاسم", size: 190, paper: "purple", dx: 0,    rot: 0.8 },
+      { t: "رائد",      size: 120, paper: "grey",   dx: 190,  rot: 2.2, outline: true },
+    ],
+    decor: [
+      { k: "sticker", kind: "smile", line: 2, ax: 1, ay: 1, ox: 20, oy: 10, r: 38 },
+      { k: "arrow",   line: 0, ax: 1, ay: -1, ox: 10, oy: -25, ang: -20 },
+      { k: "scribble", line: 1, ax: -1, ay: -1, ox: -60, oy: -50, w: 360, h: 80, ang: -8 },
+    ] },
+  { lines: [
+      { t: "علي",  size: 125, paper: "grey",   dx: 150,  rot: 2, outline: true },
+      { t: "حسين", size: 230, paper: "purple", dx: -10,  rot: -1 },
+    ],
+    decor: [
+      { k: "sticker", kind: "bulb", line: 0, ax: -1, ay: 1, ox: -30, oy: 5, r: 40 },
+      { k: "arrow",   line: 1, ax: 1, ay: 1, ox: 0, oy: 40, ang: 150 },
+      { k: "scribble", line: 1, ax: 1, ay: -1, ox: 40, oy: -40, w: 380, h: 90, ang: -12 },
+    ] },
+  { lines: [
+      { t: "محسن", size: 230, paper: "purple", dx: 10,   rot: 1.2 },
+      { t: "حسين", size: 120, paper: "white",  dx: -170, rot: -2.5 },
+    ],
+    decor: [
+      { k: "sticker", kind: "bolt", line: 1, ax: 1, ay: 1, ox: 10, oy: 5, r: 40 },
+      { k: "arrow",   line: 0, ax: -1, ay: -1, ox: -10, oy: -10, ang: 25 },
+      { k: "scribble", line: 0, ax: -1, ay: 1, ox: -90, oy: 30, w: 420, h: 80, ang: -6 },
+    ] },
+];
+const START = 0.3, SLOT = 4.8, DURATION = START + SLOT * TITLES.length + 0.4;
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eOutBack = k => { const c1 = 2.2, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const rad = d => d * Math.PI / 180;
+function rng(seed) { seed = Math.floor(seed) % 2147483647 || 1; return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+const PAPER = {
+  purple: { base: "#8860D6", light: "#A98BF0", dark: "#6B45B8" },
+  white:  { base: "#F2F2EF", light: "#FFFFFF", dark: "#CFCFCB" },
+  grey:   { base: "#DADAD7", light: "#EDEDEA", dark: "#B9B9B5" },
+};
+
+// ---------- background (pre-rendered once) ----------
+const bg = document.createElement("canvas"); bg.width = W; bg.height = H;
+function makeBackground() {
+  const g = bg.getContext("2d"), r = rng(7);
+  const gr = g.createRadialGradient(CX, CY, 80, CX, CY, 1150);
+  gr.addColorStop(0, "#F08AA0"); gr.addColorStop(0.55, "#F4A3B3"); gr.addColorStop(1, "#F8C0CB");
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 9000; i++) { // fine paper grain
+    g.fillStyle = r() < 0.5 ? "rgba(255,255,255,.07)" : "rgba(150,40,70,.06)";
+    g.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2);
+  }
+  for (let i = 0; i < 420; i++) { // speckles
+    g.fillStyle = `rgba(${150 + r() * 60},${30 + r() * 40},${60 + r() * 30},${0.12 + r() * 0.3})`;
+    g.beginPath(); g.ellipse(r() * W, r() * H, 1 + r() * 4, 1 + r() * 3, r() * 3, 0, 7); g.fill();
+  }
+  g.strokeStyle = "rgba(220,70,90,.35)"; g.lineCap = "round"; // scratches
+  for (let i = 0; i < 9; i++) {
+    g.lineWidth = 2 + r() * 3; g.beginPath();
+    const x = r() * W, y = r() * H, a = r() * 6.28, l = 40 + r() * 90;
+    g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+}
+
+// ---------- paper pieces ----------
+function tornPoly(w, h, seed) {
+  const r = rng(seed), pts = [], j = (a) => (r() - 0.5) * 2 * a;
+  for (let x = -w / 2; x < w / 2; x += 22) pts.push([x, -h / 2 + j(5)]);
+  for (let y = -h / 2; y < h / 2; y += 20) pts.push([w / 2 + j(4), y]);
+  for (let x = w / 2; x > -w / 2; x -= 22) pts.push([x, h / 2 + j(5)]);
+  for (let y = h / 2; y > -h / 2; y -= 20) pts.push([-w / 2 + j(4), y]);
+  return pts;
+}
+function polyPath(pts) { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); }
+
+function drawPaper(pts, w, h, kind, seed) {
+  const P = PAPER[kind], r = rng(seed + 3);
+  ctx.save();
+  ctx.shadowColor = "rgba(90,20,40,.35)"; ctx.shadowBlur = 16; ctx.shadowOffsetX = 4; ctx.shadowOffsetY = 7;
+  polyPath(pts); ctx.fillStyle = P.base; ctx.fill();
+  ctx.restore();
+  ctx.save(); polyPath(pts); ctx.clip();
+  for (let i = 0; i < 26; i++) { // horizontal fibre streaks
+    ctx.fillStyle = r() < 0.5 ? P.light : P.dark; ctx.globalAlpha = 0.18 + r() * 0.2;
+    ctx.fillRect(-w / 2 + r() * w * 0.4, -h / 2 + r() * h, w * (0.2 + r() * 0.6), 1 + r() * 2.5);
+  }
+  ctx.globalAlpha = 1;
+  const sh = ctx.createLinearGradient(0, -h / 2, 0, h / 2); // soft top light / bottom shade
+  sh.addColorStop(0, "rgba(255,255,255,.18)"); sh.addColorStop(1, "rgba(0,0,0,.10)");
+  ctx.fillStyle = sh; ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.restore();
+  polyPath(pts); ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 2; ctx.stroke();
+}
+
+function drawBall(x, y, r, kind, seed, rot) {
+  const P = PAPER[kind], g = rng(seed), n = 9, pts = [];
+  for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rot, rr = r * (0.78 + g() * 0.3); pts.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr]); }
+  ctx.save(); ctx.shadowColor = "rgba(90,20,40,.35)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    ctx.beginPath(); ctx.moveTo(x + (g() - .5) * r * .3, y + (g() - .5) * r * .3); ctx.lineTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.closePath();
+    ctx.fillStyle = [P.base, P.light, P.dark][Math.floor(g() * 3)]; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawScribble(x, y, w, h, ang, p, seed) { // zig-zag hatch "painted" by trim progress
+  if (p <= 0) return;
+  const r = rng(seed), pts = []; let cx = 0, up = 1;
+  while (cx < w) { pts.push([cx, up * h / 2 * (0.7 + r() * 0.4)]); cx += 20 + r() * 14; up = -up; }
+  const total = (pts.length - 1) * p;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rad(ang)); ctx.translate(-w / 2, 0);
+  ctx.strokeStyle = "#111"; ctx.lineWidth = 13; ctx.lineCap = ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(...pts[0]);
+  for (let i = 1; i <= Math.floor(total); i++) ctx.lineTo(...pts[i]);
+  const f = total % 1, i0 = Math.floor(total);
+  if (f > 0 && pts[i0 + 1]) ctx.lineTo(lerp(pts[i0][0], pts[i0 + 1][0], f), lerp(pts[i0][1], pts[i0 + 1][1], f));
+  ctx.stroke(); ctx.restore();
+}
+
+function drawSticker(kind, x, y, r) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.shadowColor = "rgba(90,20,40,.3)"; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4;
+  ctx.fillStyle = "#FFD21F"; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+  ctx.shadowColor = "transparent"; ctx.strokeStyle = "#111"; ctx.fillStyle = "#111"; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.stroke();
+  if (kind === "smile") {
+    ctx.beginPath(); ctx.arc(-r * .33, -r * .25, r * .1, 0, 7); ctx.arc(r * .33, -r * .25, r * .1, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, r * .05, r * .55, 0.2, Math.PI - 0.2); ctx.lineWidth = 5; ctx.stroke();
+  } else if (kind === "bulb") {
+    ctx.beginPath(); ctx.arc(0, -r * .12, r * .38, 0, 7); ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillRect(-r * .18, r * .25, r * .36, r * .12); ctx.fillRect(-r * .12, r * .42, r * .24, r * .1);
+  } else if (kind === "bolt") {
+    ctx.beginPath(); ctx.moveTo(r * .12, -r * .6); ctx.lineTo(-r * .32, r * .1); ctx.lineTo(0, r * .1); ctx.lineTo(-r * .12, r * .6);
+    ctx.lineTo(r * .34, -r * .1); ctx.lineTo(0, -r * .1); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawArrow(x, y, ang, s) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rad(ang)); ctx.scale(s, s);
+  ctx.fillStyle = "#111"; ctx.beginPath();
+  ctx.moveTo(-60, -9); ctx.lineTo(18, -9); ctx.lineTo(18, -26); ctx.lineTo(62, 0); ctx.lineTo(18, 26); ctx.lineTo(18, 9); ctx.lineTo(-60, 9);
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+
+// ---------- layout (needs the font) ----------
+function layoutTitles() {
+  for (const T of TITLES) {
+    let y = 0; T.boxes = [];
+    for (const [i, L] of T.lines.entries()) {
+      ctx.font = `900 ${L.size}px Cairo`; ctx.direction = "rtl";
+      const tw = ctx.measureText(L.t).width, w = tw + L.size * 0.7, h = L.size * 1.18;
+      T.boxes.push({ L, w, h, y: y + h / 2, pts: tornPoly(w, h, 100 + i * 17 + L.size) });
+      y += h * 0.97;
+    }
+    const mid = (y + T.boxes[0].h * 0.03) / 2;
+    T.boxes.forEach(b => { b.x = CX + b.L.dx; b.y = CY - 10 - mid + b.y; });
+  }
+}
+
+// ---------- rendering ----------
+function renderTitle(T, u, ti) {
+  const fr = Math.floor(u * 12) / 12, jr = rng(ti * 1000 + Math.floor(u * 12)); // 12fps stop-motion wobble
+  const wob = () => (jr() - 0.5);
+  const enter = i => eOutBack(prog(u, 0.25 + i * 0.16, 0.65));
+  const enterLin = i => prog(u, 0.25 + i * 0.16, 0.65);
+  const exitP = i => prog(u, 3.95 + (T.boxes.length - 1 - i) * 0.08, 0.5);
+  const cen = { x: CX, y: CY };
+  const hold = 1 + 0.012 * Math.sin(fr * 2.2);
+
+  // crumpled balls
+  const bp = eOutBack(prog(u, 0, 0.35)) * (1 - prog(u, 0.3, 0.4));
+  const bx = prog(u, 3.85, 0.3), bo = eOutBack(bx) * (1 - prog(u, 4.45, 0.3));
+  const bs = Math.max(bp, bo);
+  if (bs > 0.01) {
+    drawBall(cen.x - 30, cen.y + 8, 62 * bs, "purple", 5 + ti, u * 2.2);
+    drawBall(cen.x + 55, cen.y - 18, 38 * bs, "white", 11 + ti, -u * 3);
+  }
+
+  // scribbles (behind the paper)
+  const sc = T.decor.filter(d => d.k === "scribble");
+  for (const d of sc) {
+    const b = T.boxes[d.line], p = eOutCubic(prog(u, 0.55, 0.5)) * (1 - eInCubic(prog(u, 3.95, 0.45)));
+    drawScribble(b.x + d.ax * b.w / 2 + d.ox, b.y + d.ay * b.h / 2 + d.oy, d.w, d.h, d.ang, p, 40 + ti);
+  }
+
+  // paper strips + text
+  T.boxes.forEach((b, i) => {
+    const p = enter(i), e = eInCubic(exitP(i)), pl = eOutCubic(enterLin(i));
+    const k = Math.max(0, p) * (1 - e) * (u > 0.3 && u < 4.45 ? hold : 1);
+    if (k < 0.01) return;
+    const x = lerp(lerp(cen.x, b.x, pl), cen.x, e) + (u > 1 && u < 3.9 ? wob() * 3 : 0);
+    const y = lerp(lerp(cen.y, b.y, pl), cen.y, e) + (u > 1 && u < 3.9 ? wob() * 3 : 0);
+    const rot = rad(b.L.rot + (1 - pl) * (i % 2 ? 40 : -40) + e * (i % 2 ? -70 : 70) + (u > 1 && u < 3.9 ? wob() * 0.8 : 0));
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+    ctx.scale(k, k * (0.7 + 0.3 * Math.min(1, p)));
+    drawPaper(b.pts, b.w, b.h, b.L.paper, 60 + i + ti * 7);
+    ctx.font = `900 ${b.L.size}px Cairo`; ctx.direction = "rtl"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const ty = b.h * 0.04;
+    if (b.L.outline) {
+      ctx.lineJoin = "round"; ctx.lineWidth = 4; ctx.strokeStyle = "#111";
+      ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fillText(b.L.t, 0, ty); ctx.strokeText(b.L.t, 0, ty);
+    } else {
+      ctx.fillStyle = "#111"; ctx.fillText(b.L.t, 0, ty);
+      ctx.globalAlpha = 0.35; ctx.fillText(b.L.t, 1.6 * Math.sign(wob() || 1), ty + 1.4); ctx.globalAlpha = 1; // ink bleed
+    }
+    ctx.restore();
+  });
+
+  // stickers + arrows pop last
+  T.decor.forEach((d, i) => {
+    if (d.k === "scribble") return;
+    const b = T.boxes[d.line], s = eOutBack(prog(u, 0.9 + i * 0.12, 0.35)) * (1 - eInCubic(prog(u, 3.9, 0.35)));
+    if (s < 0.01) return;
+    const x = b.x + d.ax * b.w / 2 + d.ox, y = b.y + d.ay * b.h / 2 + d.oy;
+    if (d.k === "sticker") { ctx.save(); ctx.translate(x, y); ctx.rotate(rad(wob() * 6)); ctx.scale(s, s); drawSticker(d.kind, 0, 0, d.r); ctx.restore(); }
+    else drawArrow(x, y, d.ang + wob() * 4, s);
+  });
+}
+
+function render(t) {
+  const z = 1.05 - 0.05 * Math.min(1, t / DURATION);
+  ctx.save(); ctx.translate(CX, CY); ctx.scale(z, z); ctx.translate(-CX, -CY);
+  ctx.drawImage(bg, 0, 0); ctx.restore();
+  TITLES.forEach((T, ti) => {
+    const u = t - (START + ti * SLOT);
+    if (u >= 0 && u <= SLOT) renderTitle(T, u, ti);
+  });
+}
+
+window.DURATION = DURATION;
+window.TITLE_STARTS = TITLES.map((_, i) => START + i * SLOT);
+window.render = render;
+window.ready = document.fonts.load("900 50px Cairo", "محمد").then(() => { makeBackground(); layoutTitles(); });
+if (!navigator.webdriver) {
+  window.ready.then(() => { const t0 = performance.now(); (function loop() { render(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(loop); })(); });
+}
+</script>
+</body>
+</html>

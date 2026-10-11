@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Jakook Shi Set Offer</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: "Reem Kufi"; font-weight: 700; src: url(../assets/fonts/reemkufi-arabic-700.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: "Reem Kufi"; font-weight: 700; src: url(../assets/fonts/reemkufi-latin-700.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+  @font-face { font-family: "Aref Ruqaa"; font-weight: 700; src: url(../assets/fonts/arefruqaa-arabic-700.woff2) format("woff2"); }
+  html, body { margin: 0; background: #2A1030; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+<script src="../assets/promo/vo_set_env.js"></script>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, FPS = 30;
+const DURATION = 15;
+const C = {
+  plum: "#3B1440", deep: "#240C29", cream: "#FFF6EE", rose: "#E7A9BE", blush: "#F8D9E2",
+  gold: "#E2B657", goldD: "#B8862B", lilac: "#C7A6C9", red: "#E0335E",
+};
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOut = k => 1 - Math.pow(1 - k, 3);
+const eIn = k => k * k * k;
+const eInOut = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eBack = k => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const eElastic = k => k === 0 || k === 1 ? k : Math.pow(2, -10 * k) * Math.sin((k * 10 - 0.75) * (2 * Math.PI / 3)) + 1;
+const fmt = v => Math.round(v).toLocaleString("en-US");
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+// in/out envelope for a scene element: 0 → 1 (entered) → 0 (exited)
+function life(t, inAt, inDur, outAt, outDur = 0.35) {
+  return { i: prog(t, inAt, inDur), o: outAt == null ? 0 : prog(t, outAt, outDur) };
+}
+
+function text(str, x, y, o = {}) {
+  ctx.save();
+  ctx.direction = o.dir || "rtl";
+  ctx.font = o.font;
+  ctx.textAlign = o.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.globalAlpha *= o.alpha ?? 1;
+  if (o.shadow) { ctx.shadowColor = o.shadow; ctx.shadowBlur = o.blur ?? 24; ctx.shadowOffsetY = o.sy ?? 6; }
+  ctx.fillStyle = o.color || C.cream;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// right-to-left wipe reveal (keeps Arabic shaping intact)
+function wipe(k, x, y, w, h, draw) {
+  if (k <= 0) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x + w * (1 - k), y, w * k + 2, h);
+  ctx.clip();
+  draw();
+  ctx.restore();
+}
+
+function goldGrad(x0, y0, x1, y1) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, "#F7E3A3"); g.addColorStop(0.45, C.gold); g.addColorStop(1, C.goldD);
+  return g;
+}
+
+// ---------- assets ----------
+const imgs = {};
+function load(name, src) { return new Promise(r => { const i = new Image(); i.onload = () => { imgs[name] = i; r(); }; i.src = src; }); }
+
+
+// ---------- layout ----------
+// voiceover (starts at 0.9 s): greeting → hijab → shirt → full set → 50% → 5,000 → call to action
+const GIRL = { cx: 960, top: 95, size: 1000 };        // cut-out placement (centre stage)
+const S = GIRL.size / 888;                            // source → screen scale
+const sx = x => GIRL.cx + (x - 444) * S, sy = y => GIRL.top + y * S;
+const LX = 370, RX = 1550;                            // left / right text columns
+
+// background changes: sea photo → lilac → champagne → rose → magenta → deep plum
+const SCENES = [0, 2.6, 4.6, 6.85, 8.45, 11.7];
+const isLight = i => i === 1 || i === 2 || i === 3;
+
+function bgPaint(i, t) {
+  if (i === 0) {
+    const k = 1.15 + t * 0.02;
+    ctx.save();
+    ctx.filter = "blur(14px) saturate(1.1)";
+    const s = W * k;
+    ctx.drawImage(imgs.photo, (W - s) / 2, (H - s) / 2 - 60, s, s);
+    ctx.restore();
+    const g = ctx.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 1100);
+    g.addColorStop(0, "rgba(36,12,41,0.15)"); g.addColorStop(1, "rgba(36,12,41,0.85)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    return;
+  }
+  const pals = [null,
+    ["#F3E8F6", "#C9A6D2"],
+    ["#FBF0D9", "#E3C083"],
+    ["#FCE6EC", "#E59AB3"],
+    ["#C2346F", "#4A1238"],
+    ["#5B2150", "#1E0A22"],
+  ];
+  const [a, b] = pals[i];
+  const g = ctx.createRadialGradient(W / 2, 420, 60, W / 2, 420, 1300);
+  g.addColorStop(0, a); g.addColorStop(1, b);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  if (i === 4) {
+    ctx.translate(W / 2, 420);
+    ctx.rotate(t * 0.15);
+    ctx.fillStyle = "rgba(255,255,255,0.07)";
+    for (let r = 0; r < 18; r++) {
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      ctx.arc(0, 0, 2400, (r / 18) * Math.PI * 2, (r / 18 + 1 / 36) * Math.PI * 2);
+      ctx.closePath(); ctx.fill();
+    }
+  } else {
+    // dotted grid that drifts slowly
+    ctx.globalAlpha = i === 5 ? 0.10 : 0.22;
+    ctx.fillStyle = i === 5 ? C.gold : "#FFFFFF";
+    const off = (t * 12) % 48;
+    for (let y = -48; y < H + 48; y += 48) for (let x = -48; x < W + 48; x += 48) {
+      ctx.beginPath(); ctx.arc(x + off, y + off * 0.5, 2.2, 0, 7); ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  if (i === 5) {
+    const r = rng(42);
+    for (let k = 0; k < 70; k++) {
+      const x = r() * W, y = r() * H, ph = r() * 6.28, sp = 1.5 + r() * 3;
+      const a2 = Math.max(0, Math.sin(t * sp + ph)) ** 3;
+      ctx.fillStyle = `rgba(247,227,163,${a2 * 0.8})`;
+      ctx.beginPath(); ctx.arc(x, y, 1.5 + r() * 2.5, 0, 7); ctx.fill();
+    }
+  }
+}
+
+// vertical slat transition: 8 strips drop in one after another
+function drawBackground(t) {
+  let cur = 0;
+  for (let i = 0; i < SCENES.length; i++) if (t >= SCENES[i]) cur = i;
+  const N = 8, sw = W / N, start = SCENES[cur];
+  const done = cur === 0 || t >= start + 0.45 + N * 0.04;
+  if (done) { bgPaint(cur, t); return cur; }
+  bgPaint(cur - 1, t);
+  ctx.save();
+  ctx.beginPath();
+  for (let i = 0; i < N; i++) {
+    const k = eInOut(prog(t, start + i * 0.04, 0.45));
+    const h = H * k;
+    if (i % 2) ctx.rect(i * sw, 0, sw + 1, h); else ctx.rect(i * sw, H - h, sw + 1, h);
+  }
+  ctx.clip();
+  bgPaint(cur, t);
+  ctx.restore();
+  // gold edges on the moving slats
+  ctx.save(); ctx.fillStyle = C.gold;
+  for (let i = 0; i < N; i++) {
+    const k = eInOut(prog(t, start + i * 0.04, 0.45));
+    if (k <= 0 || k >= 1) continue;
+    ctx.fillRect(i * sw, i % 2 ? H * k - 6 : H - H * k, sw + 1, 6);
+  }
+  ctx.restore();
+  return cur;
+}
+
+// ---------- shapes: gather in the centre, then burst out to their spots ----------
+const SHAPES = (() => {
+  const r = rng(23); const out = [];
+  const spots = [
+    [80, 90], [520, 70], [80, 990], [560, 1010], [40, 560], [690, 230],
+    [1840, 90], [1400, 60], [1850, 990], [1360, 1010], [1880, 560], [1230, 230],
+    [700, 880], [1220, 880], [300, 240], [1620, 240],
+  ];
+  spots.forEach(([x, y], k) => out.push({
+    x, y, size: 26 + r() * 54, type: k % 2 ? "circle" : "square",
+    fill: r() > 0.5, color: [C.gold, C.rose, C.cream, C.lilac][k % 4],
+    a0: (k / spots.length) * Math.PI * 2, spin: (r() - 0.5) * 2, ph: r() * 6.28,
+  }));
+  return out;
+})();
+
+function drawShape(s, x, y, size, rot, alpha) {
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot); ctx.globalAlpha = alpha;
+  ctx.lineWidth = Math.max(3, size * 0.09);
+  ctx.fillStyle = s.color; ctx.strokeStyle = s.color;
+  ctx.beginPath();
+  if (s.type === "circle") ctx.arc(0, 0, size / 2, 0, 7);
+  else ctx.roundRect(-size / 2, -size / 2, size, size, size * 0.18);
+  s.fill ? ctx.fill() : ctx.stroke();
+  ctx.restore();
+}
+
+function drawShapes(t, scene) {
+  let kick = 0;
+  for (const c of SCENES.slice(1)) { const p = prog(t, c, 0.6); if (p > 0 && p < 1) kick = Math.max(kick, Math.sin(p * Math.PI)); }
+  const gather = eOut(prog(t, 0, 0.7));          // spiral into the middle
+  const burst = eBack(prog(t, 0.75, 0.8));       // then fly out
+  const exit = prog(t, 14.2, 0.6);
+  for (const s of SHAPES) {
+    const a = s.a0 + t * 2.2, rad = 70 + 90 * (1 - gather);
+    const cx = W / 2 + Math.cos(a) * rad, cy = 470 + Math.sin(a) * rad;
+    const fx = Math.sin(t * 0.9 + s.ph) * 14 * burst, fy = Math.cos(t * 1.1 + s.ph) * 14 * burst;
+    let x = lerp(cx, s.x, burst) + fx, y = lerp(cy, s.y, burst) + fy;
+    x = lerp(x, x + (x - W / 2) * 1.2, eIn(exit)); y = lerp(y, y + (y - H / 2) * 1.2, eIn(exit));
+    const size = s.size * lerp(0.5, 1, Math.min(1, burst)) * (1 + kick * 0.35);
+    drawShape(s, x, y, size, t * s.spin + s.ph + kick, gather * (isLight(scene) ? 0.75 : 0.85) * (1 - exit));
+  }
+}
+
+function drawBursts(t) {
+  SCENES.slice(1).forEach((c, idx) => {
+    const p = prog(t, c, 1.1);
+    if (p <= 0 || p >= 1) return;
+    const r = rng(100 + idx), ox = W / 2, oy = 420;
+    for (let k = 0; k < 18; k++) {
+      const a = r() * Math.PI * 2, d = 250 + r() * 750, sz = 12 + r() * 26;
+      const s = { type: r() > 0.5 ? "circle" : "square", fill: r() > 0.4, color: [C.gold, C.cream, C.rose][k % 3] };
+      drawShape(s, ox + Math.cos(a) * d * eOut(p), oy + Math.sin(a) * d * eOut(p), sz * (1 - p * 0.5), a + p * 4, 1 - eIn(p));
+    }
+  });
+}
+
+// ---------- the girl (breathing, sway, talking) ----------
+const girlCv = document.createElement("canvas"); girlCv.width = girlCv.height = 888;
+const gctx = girlCv.getContext("2d");
+const jawCv = document.createElement("canvas"); jawCv.width = jawCv.height = 888;
+
+function buildJaw() {
+  // lower-face patch below the mouth line, feathered at the sides and bottom
+  const j = jawCv.getContext("2d");
+  j.drawImage(imgs.girl, 0, 0);
+  j.globalCompositeOperation = "destination-in";
+  const m = document.createElement("canvas"); m.width = m.height = 888;
+  const mc = m.getContext("2d");
+  mc.save();
+  mc.translate(470, 330); mc.scale(1, 0.85);
+  const g = mc.createRadialGradient(0, 0, 10, 0, 0, 100);
+  g.addColorStop(0, "rgba(0,0,0,1)"); g.addColorStop(0.62, "rgba(0,0,0,1)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  mc.fillStyle = g; mc.fillRect(-110, -60, 220, 180);
+  mc.restore();
+  j.drawImage(m, 0, 0);
+}
+
+const MOUTH = { x: 470, y: 299, w: 86 };
+function voiceAt(t) {
+  const env = window.VO_ENV || [];
+  const f = t * FPS, i = Math.floor(f), k = f - i;
+  return lerp(env[i] || 0, env[i + 1] || 0, k);
+}
+
+function drawGirl(t) {
+  const a = voiceAt(t);
+  const open = a * 9;                // px in source space
+  gctx.clearRect(0, 0, 888, 888);
+  gctx.drawImage(imgs.girl, 0, 0);
+  if (open > 0.3) {
+    // open the mouth by stretching the lip gap and dropping the jaw (original pixels, feathered)
+    const y = MOUTH.y, x0 = 370, w = 200, gap = 9, jaw = 110;
+    gctx.drawImage(jawCv, x0, y + gap, w, jaw, x0, y + gap + open, w, jaw);
+    gctx.drawImage(jawCv, x0, y - 3, w, gap + 3, x0, y - 3, w, gap + 3 + open);
+  }
+  // body motion
+  const breathe = 1 + Math.sin(t * 2.2) * 0.006;
+  const sway = Math.sin(t * 1.15) * 0.012 + Math.sin(t * 0.6) * 0.006;
+  const nod = -a * 4 + Math.sin(t * 3.1) * 1.5;
+  const enter = eOut(prog(t, 0, 0.9));
+
+  ctx.save();
+  // soft glow / floor shadow
+  const gl = ctx.createRadialGradient(GIRL.cx, H - 30, 20, GIRL.cx, H - 30, 520);
+  gl.addColorStop(0, "rgba(0,0,0,0.28)"); gl.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = gl; ctx.fillRect(GIRL.cx - 600, H - 300, 1200, 300);
+
+  ctx.translate(GIRL.cx + (1 - enter) * 500, H + 40);
+  ctx.rotate(sway);
+  ctx.scale(breathe, breathe);
+  ctx.globalAlpha = enter;
+  ctx.drawImage(girlCv, -GIRL.size / 2, GIRL.top - H - 40 + nod, GIRL.size, GIRL.size);
+  ctx.restore();
+}
+
+// decorative frame behind the girl
+
+// arch frame behind the girl
+function drawFrame(t, scene) {
+  const k = eBack(prog(t, 0.4, 1.0));
+  if (k <= 0) return;
+  ctx.save();
+  ctx.translate(W / 2, 470);
+  ctx.globalAlpha = Math.min(1, k);
+  ctx.fillStyle = isLight(scene) ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.08)";
+  ctx.beginPath(); ctx.arc(0, 0, 380 * k, Math.PI, 0); ctx.lineTo(380 * k, 700); ctx.lineTo(-380 * k, 700); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = C.gold; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(0, 0, 410 * k, Math.PI, 0); ctx.lineTo(410 * k, 700); ctx.moveTo(-410 * k, 0); ctx.lineTo(-410 * k, 700); ctx.stroke();
+  ctx.rotate(t * 0.35);
+  ctx.setLineDash([22, 16]); ctx.globalAlpha *= 0.7;
+  ctx.beginPath(); ctx.arc(0, 0, 450 * k, 0, 7); ctx.stroke();
+  ctx.restore();
+}
+
+function card(x, y, w, h, alpha, light) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.shadowColor = "rgba(40,10,40,0.25)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20;
+  ctx.fillStyle = light ? "rgba(255,255,255,0.78)" : "rgba(255,255,255,0.10)";
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 36); ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.strokeStyle = C.gold; ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function pill(str, x, y, alpha, bg, fg, size = 34) {
+  ctx.save();
+  ctx.font = `700 ${size}px "Reem Kufi"`;
+  const w = ctx.measureText(str).width + size * 1.4;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = bg;
+  ctx.beginPath(); ctx.roundRect(x - w / 2, y - size * 0.85, w, size * 1.7, size * 0.85); ctx.fill();
+  ctx.restore();
+  text(str, x, y + 2, { font: `700 ${size}px "Reem Kufi"`, color: fg, alpha });
+}
+
+// pointer from the card to a spot on the photo
+function pointer(t, start, fromX, fromY, toX, toY, light) {
+  const k = eOut(prog(t, start, 0.6));
+  if (k <= 0) return;
+  const pulse = (t - start) % 1.2 / 1.2;
+  ctx.save();
+  ctx.strokeStyle = light ? C.plum : C.gold; ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 4;
+  const mx = lerp(fromX, toX, 0.55), my = fromY;
+  ctx.beginPath(); ctx.moveTo(fromX, fromY);
+  const ex = lerp(fromX, toX, k), ey = k < 0.55 ? fromY : lerp(my, toY, (k - 0.55) / 0.45);
+  if (k < 0.55) ctx.lineTo(ex, ey); else { ctx.lineTo(mx, my); ctx.lineTo(ex, ey); }
+  ctx.stroke();
+  ctx.beginPath(); ctx.arc(fromX, fromY, 8, 0, 7); ctx.fill();
+  if (k >= 1) {
+    ctx.beginPath(); ctx.arc(toX, toY, 14, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1 - pulse; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(toX, toY, 14 + pulse * 46, 0, 7); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+
+function goldLogo(str, x, y, size) {
+  ctx.save();
+  ctx.font = `700 ${size}px "Aref Ruqaa"`; ctx.direction = "rtl"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(0,0,0,0.35)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10;
+  ctx.fillStyle = goldGrad(x - size * 1.4, y - size / 2, x + size * 1.4, y + size / 2);
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+function introScene(t) {
+  const L = life(t, 1.0, 0.8, 2.35);
+  if (L.i <= 0 || L.o >= 1) return;
+  const out = eIn(L.o);
+  ctx.save(); ctx.globalAlpha = 1 - out;
+  // left: logo
+  ctx.save(); ctx.translate(-out * 250, 0);
+  text("متجر", LX, 360, { font: `700 52px "Reem Kufi"`, color: C.rose, alpha: eOut(prog(t, 1.0, 0.5)) });
+  wipe(eOut(L.i), LX - 330, 400, 660, 220, () => goldLogo("جكوك شي", LX, 510, 170));
+  const sh = prog(t, 1.6, 0.7);
+  if (sh > 0 && sh < 1) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const gx = LX - 350 + sh * 700;
+    const g = ctx.createLinearGradient(gx - 70, 0, gx + 70, 0);
+    g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,0.45)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.font = `700 170px "Aref Ruqaa"`; ctx.direction = "rtl"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = g; ctx.fillText("جكوك شي", LX, 510);
+    ctx.restore();
+  }
+  ctx.restore();
+  // right: tagline
+  ctx.save(); ctx.translate(out * 250, 0);
+  wipe(eOut(prog(t, 1.25, 0.7)), RX - 330, 400, 660, 110, () =>
+    text("أناقة الحجاب", RX, 455, { font: `700 78px "Reem Kufi"`, color: C.cream, shadow: "rgba(0,0,0,0.3)" }));
+  wipe(eOut(prog(t, 1.45, 0.7)), RX - 330, 510, 660, 100, () =>
+    text("بلمسة عصرية", RX, 560, { font: `700 64px "Reem Kufi"`, color: C.gold }));
+  const lk = eOut(prog(t, 1.3, 0.6));
+  ctx.strokeStyle = C.gold; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(RX - 200 * lk, 625); ctx.lineTo(RX + 200 * lk, 625); ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+}
+
+// price card on one side of the girl
+function priceCard(t, o) {
+  const L = life(t, o.start, 0.7, o.end);
+  if (L.i <= 0 || L.o >= 1) return;
+  const ink = C.plum, out = eIn(L.o), k = eBack(L.i), dir = o.x < W / 2 ? -1 : 1;
+  ctx.save();
+  ctx.translate(dir * (out * 300 + (1 - k) * 160), 0);
+  ctx.globalAlpha = (1 - out) * Math.min(1, L.i * 2);
+  card(o.x - 270, 270, 540, 520, 1, true);
+  pill(o.tag, o.x, 335, 1, C.gold, C.plum, 30);
+  wipe(eOut(prog(t, o.start + 0.15, 0.6)), o.x - 260, 370, 520, 140, () =>
+    text(o.title, o.x, 440, { font: `700 112px "Reem Kufi"`, color: ink }));
+  const pk = eOut(prog(t, o.start + 0.35, 0.9));
+  const sc = 1 + (1 - eElastic(prog(t, o.start + 0.35, 1.0))) * 0.25;
+  ctx.save(); ctx.translate(o.x, 600); ctx.scale(sc, sc);
+  text(fmt(o.price * pk), 0, 0, { font: `900 170px Cairo`, color: C.red, dir: "ltr", shadow: "rgba(0,0,0,0.15)" });
+  ctx.restore();
+  wipe(eOut(prog(t, o.start + 0.6, 0.5)), o.x - 260, 690, 520, 80, () =>
+    text("دينار عراقي", o.x, 728, { font: `700 50px "Reem Kufi"`, color: ink }));
+  ctx.restore();
+  if (out < 0.2) pointer(t, o.start + 0.5, o.x - dir * 270, 470, o.px, o.py, true);
+}
+
+// full set: hijab + shirt, 10,000 → 5,000
+function setScene(t) {
+  const L = life(t, 6.95, 0.7, 11.55);
+  if (L.i <= 0 || L.o >= 1) return;
+  const out = eIn(L.o), light = t < 8.45, ink = light ? C.plum : C.cream;
+  ctx.save(); ctx.globalAlpha = 1 - out;
+
+  // left column: title, then the 50% badge drops in
+  ctx.save(); ctx.translate(-out * 300, 0);
+  wipe(eOut(L.i), LX - 330, 190, 660, 150, () =>
+    text("السيت الكامل", LX, 265, { font: `700 96px "Reem Kufi"`, color: ink, shadow: light ? null : "rgba(0,0,0,0.3)" }));
+  const ik = eBack(prog(t, 7.3, 0.6));
+  if (ik > 0) {
+    ctx.save(); ctx.translate(LX, 365); ctx.scale(ik, ik);
+    pill("حجاب + قميص", 0, 0, 1, light ? C.plum : "rgba(255,255,255,0.15)", C.cream, 40);
+    ctx.restore();
+  }
+  const bk = eElastic(prog(t, 8.55, 0.9));
+  if (bk > 0) {
+    ctx.save(); ctx.translate(LX, 650); ctx.scale(bk, bk);
+    ctx.save(); ctx.rotate(t * 0.4);
+    ctx.fillStyle = goldGrad(-220, -220, 220, 220);
+    ctx.beginPath();
+    for (let i = 0; i < 44; i++) { const r = i % 2 ? 190 : 222, a = i / 44 * Math.PI * 2; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+    ctx.closePath(); ctx.shadowColor = "rgba(0,0,0,0.35)"; ctx.shadowBlur = 40; ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = C.red; ctx.beginPath(); ctx.arc(0, 0, 172, 0, 7); ctx.fill();
+    ctx.strokeStyle = C.cream; ctx.lineWidth = 4; ctx.setLineDash([12, 9]);
+    ctx.beginPath(); ctx.arc(0, 0, 155, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    text("خصم", 0, -72, { font: `700 64px "Reem Kufi"`, color: C.cream });
+    text(Math.round(50 * eOut(prog(t, 8.65, 0.7))) + "%", 0, 32, { font: `900 140px Cairo`, color: C.cream, dir: "ltr" });
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // right column: set price card
+  ctx.save(); ctx.translate(out * 300 + (1 - eBack(prog(t, 7.15, 0.7))) * 200, 0);
+  ctx.globalAlpha *= Math.min(1, prog(t, 7.15, 0.3));
+  card(RX - 280, 230, 560, 640, 1, light);
+  text(t < 10.0 ? "السعر" : "بدلاً من", RX, 310, { font: `700 48px "Reem Kufi"`, color: ink });
+  // 10,000 shrinks + gets struck once the discount lands
+  const dk = eInOut(prog(t, 9.9, 0.5));
+  const oldY = lerp(450, 390, dk), oldS = lerp(1, 0.55, dk);
+  ctx.save(); ctx.translate(RX, oldY); ctx.scale(oldS, oldS);
+  text(fmt(10000 * eOut(prog(t, 7.3, 0.9))), 0, 0, { font: `900 160px Cairo`, color: light ? C.red : "rgba(255,246,238,0.6)", dir: "ltr" });
+  const sk = eOut(prog(t, 8.75, 0.35));
+  if (sk > 0) {
+    ctx.strokeStyle = C.red; ctx.lineWidth = 14; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-230, 30); ctx.lineTo(-230 + 460 * sk, 30 - 70 * sk); ctx.stroke();
+  }
+  ctx.restore();
+  // 5,000
+  const nk = eElastic(prog(t, 10.0, 0.9));
+  if (nk > 0) {
+    ctx.save(); ctx.translate(RX, 600); ctx.scale(nk, nk);
+    text(fmt(5000), 0, 0, { font: `900 190px Cairo`, color: C.gold, dir: "ltr", shadow: "rgba(0,0,0,0.35)" });
+    ctx.restore();
+    text("دينار عراقي فقط", RX, 760, { font: `700 52px "Reem Kufi"`, color: C.cream, alpha: eOut(prog(t, 10.3, 0.4)) });
+  } else {
+    text("دينار عراقي", RX, 580, { font: `700 52px "Reem Kufi"`, color: ink, alpha: (1 - dk) * eOut(prog(t, 7.6, 0.4)) });
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+function finaleScene(t) {
+  const k = prog(t, 11.75, 0.7);
+  if (k <= 0) return;
+  const exit = prog(t, 14.3, 0.5);
+  ctx.save(); ctx.globalAlpha = 1 - exit;
+  // logo left, set price right
+  wipe(eOut(k), LX - 330, 380, 660, 220, () => goldLogo("جكوك شي", LX, 480, 150));
+  text("خصم 50% على السيت", LX, 610, { font: `700 50px "Reem Kufi"`, color: C.cream, alpha: eOut(prog(t, 12.0, 0.5)) });
+  const pk = eBack(prog(t, 11.9, 0.7));
+  if (pk > 0) {
+    ctx.save(); ctx.translate(RX, 470); ctx.scale(pk, pk);
+    text("السيت كامل", 0, -90, { font: `700 56px "Reem Kufi"`, color: C.cream });
+    text("5,000", 0, 30, { font: `900 150px Cairo`, color: C.gold, dir: "ltr", shadow: "rgba(0,0,0,0.35)" });
+    text("دينار", 0, 140, { font: `700 46px "Reem Kufi"`, color: C.cream });
+    ctx.restore();
+  }
+  // call to action under the girl
+  const ck = eBack(prog(t, 11.85, 0.6));
+  if (ck > 0) {
+    const pulse = 1 + Math.sin((t - 11.85) * 6) * 0.035;
+    ctx.save(); ctx.translate(W / 2, 975); ctx.scale(ck * pulse, ck * pulse);
+    ctx.fillStyle = goldGrad(-300, -60, 300, 60);
+    ctx.shadowColor = "rgba(226,182,87,0.6)"; ctx.shadowBlur = 40;
+    ctx.beginPath(); ctx.roundRect(-310, -62, 620, 124, 62); ctx.fill();
+    ctx.shadowColor = "transparent";
+    text("سارعوا بالطلب الآن", 0, 4, { font: `700 62px "Reem Kufi"`, color: C.plum });
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function outro(t) {
+  const k = eOut(prog(t, 14.4, 0.45));
+  if (k <= 0) return;
+  ctx.save();
+  ctx.fillStyle = `rgba(30,10,34,${k * 0.88})`; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = k;
+  ctx.translate(W / 2, H / 2); ctx.scale(0.8 + k * 0.2, 0.8 + k * 0.2);
+  goldLogo("جكوك شي", 0, -30, 220);
+  text("السيت الكامل بـ 5,000 دينار", 0, 140, { font: `700 56px "Reem Kufi"`, color: C.cream });
+  ctx.restore();
+}
+
+// ---------- main ----------
+function render(t) {
+  ctx.clearRect(0, 0, W, H);
+  const scene = drawBackground(t);
+  drawFrame(t, scene);
+  drawShapes(t, scene);
+  drawGirl(t);
+  drawBursts(t);
+  introScene(t);
+  priceCard(t, { start: 2.7, end: 6.75, x: LX, title: "الحجاب", price: 3000, tag: "✦ حجاب ناعم", px: sx(300), py: sy(250) });
+  priceCard(t, { start: 4.7, end: 6.75, x: RX, title: "القميص", price: 7000, tag: "✦ قميص أنيق", px: sx(560), py: sy(640) });
+  setScene(t);
+  finaleScene(t);
+  outro(t);
+  const fi = 1 - prog(t, 0, 0.35);
+  if (fi > 0) { ctx.fillStyle = `rgba(0,0,0,${fi})`; ctx.fillRect(0, 0, W, H); }
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = (async () => {
+  await Promise.all([load("girl", "../assets/promo/girl_cut.png"), load("photo", "../assets/promo/girl_big.png")]);
+  await Promise.all([
+    document.fonts.load(`700 50px "Reem Kufi"`, "الحجاب"),
+    document.fonts.load(`700 50px "Aref Ruqaa"`, "جكوك"),
+    document.fonts.load(`900 50px Cairo`, "3,000"),
+    document.fonts.load(`700 50px Cairo`, "دينار"),
+  ]);
+  buildJaw();
+  render(0);
+})();
+
+// live preview when opened directly
+if (!navigator.webdriver) {
+  window.ready.then(() => {
+    const t0 = performance.now();
+    const loop = () => { render(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    loop();
+  });
+}
+</script>
+</body>
+</html>
+

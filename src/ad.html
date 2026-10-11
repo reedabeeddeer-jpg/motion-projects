@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Logo Ad</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #12052E; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// 10 s ad: animated gradient background, logo slides in from the right to the left (to centre),
+// then tagline and call-to-action. Sound: scripts/ad_soundtrack.py (cues match the times below).
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 10;
+
+// ---- edit these ----
+const TEXT = { brand: "علامتك", tagline: "جودة تصنع الفرق", cta: "اطلب الآن" };
+// Put your own logo at assets/logo.png (transparent PNG) and it replaces the drawn placeholder mark.
+const LOGO_SRC = "../assets/logo.png";
+
+const T = {
+  enter: 0.6, enterDur: 1.5,   // logo slides from right edge to centre
+  shine: 2.3,                  // light sweep across logo
+  brand: 2.6, tagline: 3.6,    // text reveals
+  cta: 6.2, out: 9.2,          // CTA, final fade
+};
+
+const ctx = document.getElementById("c").getContext("2d");
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eOutBack = k => { const c1 = 1.4, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const font = (w, s) => `${w} ${s}px Cairo`;
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+let logoImg = null;
+
+// ---------- background: drifting multi-stop gradient + soft colour blobs ----------
+const BLOBS = [
+  { c: [255, 77, 141], r: 760, ax: 0.30, ay: 0.25, sp: 0.22, ph: 0.0 },
+  { c: [124, 77, 255], r: 900, ax: 0.75, ay: 0.70, sp: 0.17, ph: 2.1 },
+  { c: [0, 212, 255], r: 680, ax: 0.80, ay: 0.20, sp: 0.26, ph: 4.0 },
+  { c: [255, 176, 59], r: 560, ax: 0.20, ay: 0.80, sp: 0.20, ph: 1.3 },
+];
+const SPARKS = (() => { const r = rng(11); return Array.from({ length: 70 }, () => ({
+  x: r() * W, y: r() * H, s: 1 + r() * 2.5, v: 10 + r() * 30, tw: r() * 6.28 })); })();
+
+function background(t) {
+  const a = t * 0.25;
+  const g = ctx.createLinearGradient(CX + Math.cos(a) * -W, CY + Math.sin(a) * -H, CX + Math.cos(a) * W, CY + Math.sin(a) * H);
+  g.addColorStop(0, "#2B0A5C");
+  g.addColorStop(0.5, "#5B1A8C");
+  g.addColorStop(1, "#0D2D6B");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const b of BLOBS) {
+    const x = W * (b.ax + 0.12 * Math.sin(t * b.sp * 2 + b.ph));
+    const y = H * (b.ay + 0.12 * Math.cos(t * b.sp * 2.4 + b.ph));
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, b.r);
+    rg.addColorStop(0, `rgba(${b.c},0.55)`);
+    rg.addColorStop(1, `rgba(${b.c},0)`);
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, W, H);
+  }
+  // sparkles drifting up
+  for (const p of SPARKS) {
+    const y = ((p.y - t * p.v) % H + H) % H;
+    ctx.globalAlpha = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 3 + p.tw));
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(p.x, y, p.s, 0, 6.283); ctx.fill();
+  }
+  ctx.restore();
+
+  // vignette
+  const v = ctx.createRadialGradient(CX, CY, H * 0.35, CX, CY, W * 0.75);
+  v.addColorStop(0, "rgba(0,0,0,0)");
+  v.addColorStop(1, "rgba(5,0,20,0.55)");
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ---------- logo ----------
+const LOGO = 300; // logo box size in px
+
+function drawMark(size) {
+  if (logoImg) {
+    const k = size / Math.max(logoImg.width, logoImg.height);
+    ctx.drawImage(logoImg, -logoImg.width * k / 2, -logoImg.height * k / 2, logoImg.width * k, logoImg.height * k);
+    return;
+  }
+  // placeholder mark: gradient rounded square with an abstract spark
+  const s = size;
+  const g = ctx.createLinearGradient(-s / 2, -s / 2, s / 2, s / 2);
+  g.addColorStop(0, "#FF4D8D"); g.addColorStop(0.5, "#FF8A3D"); g.addColorStop(1, "#FFC845");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.roundRect(-s / 2, -s / 2, s, s, s * 0.26); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.beginPath(); ctx.roundRect(-s / 2, -s / 2, s, s * 0.5, [s * 0.26, s * 0.26, 0, 0]); ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  const r1 = s * 0.32, r2 = s * 0.09;
+  for (let i = 0; i < 8; i++) {
+    const ang = -Math.PI / 2 + i * Math.PI / 4, r = i % 2 ? r2 : r1;
+    ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+  }
+  ctx.closePath(); ctx.fill();
+}
+
+function logo(t) {
+  const k = prog(t, T.enter, T.enterDur);
+  if (k <= 0) return;
+  const e = eOutBack(k);
+  const startX = W + LOGO;              // off-screen right
+  const x = lerp(startX, CX, e);        // moves right -> left
+  const y = CY - 90 + Math.sin(Math.max(0, t - T.enter - T.enterDur) * 1.6) * 6 * prog(t, 2.2, 1);
+  const tilt = (1 - eOutCubic(k)) * -0.25; // leans into the motion
+  const fade = 1 - prog(t, T.out, 0.8);
+  const speed = 1 - eOutCubic(k);       // 1 while fast, 0 at rest
+
+  ctx.save();
+  ctx.globalAlpha = fade;
+  // motion trail (ghost copies to the right of the logo)
+  for (let i = 4; i >= 1; i--) {
+    ctx.save();
+    ctx.globalAlpha = fade * 0.18 * speed * (5 - i) / 4;
+    ctx.translate(x + i * 90 * speed, y);
+    ctx.rotate(tilt);
+    drawMark(LOGO);
+    ctx.restore();
+  }
+  // glow behind logo once it lands
+  const land = prog(t, T.enter + T.enterDur * 0.6, 0.6);
+  if (land > 0) {
+    const pulse = 1 + 0.05 * Math.sin(t * 2.5);
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, LOGO * 1.4 * pulse);
+    rg.addColorStop(0, `rgba(255,170,120,${0.45 * land})`);
+    rg.addColorStop(1, "rgba(255,170,120,0)");
+    ctx.fillStyle = rg;
+    ctx.fillRect(x - LOGO * 2, y - LOGO * 2, LOGO * 4, LOGO * 4);
+  }
+  // landing ring burst
+  const ring = prog(t, T.enter + T.enterDur * 0.55, 0.9);
+  if (ring > 0 && ring < 1) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.7 * (1 - ring)})`;
+    ctx.lineWidth = 6 * (1 - ring) + 1;
+    ctx.beginPath(); ctx.arc(x, y, LOGO * 0.6 + ring * LOGO * 1.1, 0, 6.283); ctx.stroke();
+  }
+  // logo itself, with shadow
+  ctx.translate(x, y);
+  ctx.rotate(tilt);
+  ctx.shadowColor = "rgba(10,0,40,0.5)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20;
+  drawMark(LOGO);
+  ctx.shadowColor = "transparent";
+  // shine sweep, clipped to logo box
+  const sh = prog(t, T.shine, 0.7);
+  if (sh > 0 && sh < 1) {
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(-LOGO / 2, -LOGO / 2, LOGO, LOGO, LOGO * 0.26); ctx.clip();
+    const sx = lerp(LOGO, -LOGO, eOutCubic(sh)); // sweep follows the same right->left direction
+    const lg = ctx.createLinearGradient(sx - 80, 0, sx + 80, 0);
+    lg.addColorStop(0, "rgba(255,255,255,0)");
+    lg.addColorStop(0.5, "rgba(255,255,255,0.65)");
+    lg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = lg;
+    ctx.rotate(0.35);
+    ctx.fillRect(-LOGO, -LOGO, LOGO * 2, LOGO * 2);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------- text ----------
+function text(str, x, y, f, color, alpha) {
+  ctx.save();
+  ctx.direction = "rtl";
+  ctx.font = f; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.globalAlpha = alpha; ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+function copy(t) {
+  const fade = 1 - prog(t, T.out, 0.8);
+  // brand name slides in from the right as well
+  const b = prog(t, T.brand, 0.8);
+  if (b > 0) text(TEXT.brand, CX + (1 - eOutExpo(b)) * 260, CY + 140, font(900, 110), "#FFFFFF", eOutCubic(b) * fade);
+  // tagline: clip-reveal from right to left
+  const g = prog(t, T.tagline, 0.9);
+  if (g > 0) {
+    ctx.save();
+    const wReveal = 900 * eOutCubic(g);
+    ctx.beginPath(); ctx.rect(CX + 450 - wReveal, CY + 200, wReveal, 100); ctx.clip();
+    text(TEXT.tagline, CX, CY + 250, font(700, 54), "#FFE3F0", fade);
+    ctx.restore();
+  }
+  // CTA pill
+  const c = prog(t, T.cta, 0.7);
+  if (c > 0) {
+    const s = eOutBack(c) * (1 + 0.03 * Math.sin((t - T.cta) * 6) * prog(t, T.cta + 0.7, 0.3));
+    ctx.save();
+    ctx.globalAlpha = clamp(c * 2) * fade;
+    ctx.translate(CX, CY + 380);
+    ctx.scale(s, s);
+    const pg = ctx.createLinearGradient(-190, 0, 190, 0);
+    pg.addColorStop(0, "#FFC845"); pg.addColorStop(1, "#FF4D8D");
+    ctx.fillStyle = pg;
+    ctx.shadowColor = "rgba(255,77,141,0.6)"; ctx.shadowBlur = 40;
+    ctx.beginPath(); ctx.roundRect(-190, -48, 380, 96, 48); ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.restore();
+    text(TEXT.cta, CX, CY + 380, font(900, 46 * s), "#2B0A5C", clamp(c * 2) * fade);
+  }
+}
+
+function render(t) {
+  background(t);
+  logo(t);
+  copy(t);
+  // final fade to dark
+  const f = prog(t, T.out + 0.3, 0.5);
+  if (f > 0) { ctx.fillStyle = `rgba(10,2,30,${f})`; ctx.fillRect(0, 0, W, H); }
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = (async () => {
+  await Promise.all(["400", "700", "900"].map(w => document.fonts.load(font(w, 40), "عربي Aa")));
+  logoImg = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = LOGO_SRC; });
+  render(0);
+})();
+
+// live preview loop when opened directly in a browser
+if (!navigator.webdriver) {
+  window.ready.then(() => { const t0 = performance.now(); (function loop(now) { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); })(t0); });
+}
+</script>
+</body>
+</html>
