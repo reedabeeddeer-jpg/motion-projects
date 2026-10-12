@@ -28,7 +28,10 @@
     "clasico:render": "node scripts/render.mjs --src src/clasico.html --audio output/clasico-soundtrack.wav --out output/clasico.mp4",
     "iraq-uae:audio": "python3 scripts/iraq-uae-soundtrack.py",
     "iraq-uae:preview": "node scripts/render.mjs --src src/iraq-uae.html --preview --times 1.5,5.5,8.6,12.8,17,21",
-    "iraq-uae:render": "node scripts/render.mjs --src src/iraq-uae.html --audio output/iraq-uae.wav --out output/iraq-uae.mp4"
+    "iraq-uae:render": "node scripts/render.mjs --src src/iraq-uae.html --audio output/iraq-uae.wav --out output/iraq-uae.mp4",
+    "bein:audio": "python3 scripts/bein_soundtrack.py",
+    "bein:preview": "node scripts/render.mjs --src src/bein.html --preview --times 2.8,6,9.2,16.5,21.3,26.5,32",
+    "bein:render": "node scripts/render.mjs --src src/bein.html --audio output/bein-soundtrack.wav --out output/bein.mp4"
   },
   "devDependencies": {
     "playwright": "1.56.1"
