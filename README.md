@@ -336,3 +336,7 @@ npm run ramadan-clasico:render   # output/ramadan-clasico.mp4
 ```
 
 الصور في `ramadan-clasico/assets` (أُزيلت الخلفية البيضاء من المنتج والشعارات). المعاينة المباشرة: افتح `ramadan-clasico/motion.html` في Chromium مع `--allow-file-access-from-files`.
+
+## ramadan-clasico-remotion — النسخة الحماسية (Remotion)
+
+نسخة موسّعة من «كلاسيكو رمضان × Signal» في Remotion: 36.5 ثانية بتعليق صوتي رجالي حماسي (ElevenLabs) وموسيقى ومؤثرات تنخفض تحت الصوت، وخمسة مشاهد مع اصطدام الشعارين وشريط «مباشر» وعدّاد 10X وانتقالات Light Leak. التفاصيل في `ramadan-clasico-remotion/README.md`، والفيديو في `output/ramadan-clasico-remotion.mp4`.
