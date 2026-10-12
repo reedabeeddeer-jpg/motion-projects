@@ -1,4 +1,4 @@
-"""Synthesizes the 20 s soundtrack for clasico/motion.html, with hits timed to its cues."""
+"""Synthesizes the 20 s soundtrack for ramadan-clasico/motion.html, with hits timed to its cues."""
 import wave
 from pathlib import Path
 
@@ -7,7 +7,7 @@ import numpy as np
 SR = 44100
 DUR = 20.0
 BEAT = 60 / 110  # 110 BPM
-OUT = Path(__file__).resolve().parent.parent / "output" / "clasico-soundtrack.wav"
+OUT = Path(__file__).resolve().parent.parent / "output" / "ramadan-clasico-soundtrack.wav"
 
 n = int(SR * DUR)
 t = np.arange(n) / SR

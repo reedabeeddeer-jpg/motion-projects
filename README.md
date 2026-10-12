@@ -28,7 +28,7 @@ npm run render   # out/logo-reveal.mp4
 
 النصوص قابلة للتعديل من `defaultProps` في `src/Root.tsx`. لاستخدام Chromium مثبت مسبقاً بدل التنزيل: اضبط `REMOTION_BROWSER` على مسار المتصفح.
 
-## clasico — كلاسيكو رمضان × Signal
+## ramadan-clasico — كلاسيكو رمضان × Signal
 
 مشهد موشن جرافيك كامل مدته 20 ثانية (1920×1080، 30fps) مع موسيقى ومؤثرات صوتية مولّدة برمجياً.
 
@@ -41,8 +41,8 @@ npm run render   # out/logo-reveal.mp4
 | 18–20 ث | البطاقة الختامية ثم تلاشٍ للأسود |
 
 ```bash
-npm run clasico:audio    # output/clasico-soundtrack.wav
-npm run clasico:render   # output/clasico.mp4
+npm run ramadan-clasico:audio    # output/ramadan-clasico-soundtrack.wav
+npm run ramadan-clasico:render   # output/ramadan-clasico.mp4
 ```
 
-الصور في `clasico/assets` (أُزيلت الخلفية البيضاء من المنتج والشعارات). المعاينة المباشرة: افتح `clasico/motion.html` في Chromium مع `--allow-file-access-from-files`.
+الصور في `ramadan-clasico/assets` (أُزيلت الخلفية البيضاء من المنتج والشعارات). المعاينة المباشرة: افتح `ramadan-clasico/motion.html` في Chromium مع `--allow-file-access-from-files`.
