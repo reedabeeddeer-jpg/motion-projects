@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Ramadan Clasico</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #050914; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// 20 s, 1920x1080. Scenes:
+//  0.0 – 3.4  intro: gradient backdrop + kinetic title "ليلة الكلاسيكو"
+//  3.4 – 8.0  clash: Barça vs Real Madrid crests collide, VS slam
+//  8.0 – 13.4 Ramadan frame: lanterns glow, "رمضان كريم" in the arch
+// 13.4 – 18.0 product hero: Signal tube with shine, bubbles and badges
+// 18.0 – 20.0 end card
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 20;
+const C = {
+  navy: "#0A1A3F", blue: "#1C5FD1", sky: "#8FD3FF", white: "#F5F8FF",
+  gold: "#F2C14E", goldDeep: "#B8862B", garnet: "#A50044", barcaBlue: "#004D98",
+  red: "#E2231A",
+};
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eInExpo = k => k === 0 ? 0 : Math.pow(2, 10 * k - 10);
+const eOutBack = (k, s = 1.70158) => 1 + (s + 1) * Math.pow(k - 1, 3) + s * Math.pow(k - 1, 2);
+const eOutElastic = k => k === 0 || k === 1 ? k : Math.pow(2, -10 * k) * Math.sin((k * 10 - 0.75) * (2 * Math.PI) / 3) + 1;
+const font = (w, s) => `${w} ${s}px Cairo`;
+// in/out window: fades in over `fin`, holds, fades out over `fout`
+const win = (t, a, b, fin = 0.3, fout = 0.3) => Math.min(prog(t, a, fin), 1 - prog(t, b - fout, fout));
+
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+const IMG = {};
+const sources = {
+  grad: "assets/bg-gradient.jpg", ramadan: "assets/bg-ramadan.jpg",
+  barca: "assets/crest-barca.png", madrid: "assets/crest-madrid.png", product: "assets/signal-product.png",
+};
+const ready = (async () => {
+  await Promise.all(Object.entries(sources).map(([k, src]) => new Promise((res, rej) => {
+    const im = new Image(); im.onload = () => { IMG[k] = im; res(); }; im.onerror = rej; im.src = src;
+  })));
+  await Promise.all([400, 700, 900].map(w => document.fonts.load(font(w, 40), "رمضان VS")));
+  render(0);
+})();
+
+// draws an image centered at (x, y) with height h
+function drawCentered(im, x, y, h, opts = {}) {
+  const w = h * im.width / im.height;
+  ctx.save();
+  ctx.globalAlpha *= opts.alpha ?? 1;
+  ctx.translate(x, y);
+  if (opts.rot) ctx.rotate(opts.rot);
+  if (opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = opts.glowBlur ?? 40; }
+  ctx.drawImage(im, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
+
+// image scaled to cover the frame, with zoom around a focus point
+function drawCover(im, zoom = 1, fx = CX, fy = CY, dx = 0, dy = 0) {
+  const s = Math.max(W / im.width, H / im.height);
+  const w = im.width * s, h = im.height * s;
+  ctx.save();
+  ctx.translate(fx + dx, fy + dy);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-fx, -fy);
+  ctx.drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
+  ctx.restore();
+}
+
+function text(str, x, y, opts = {}) {
+  ctx.save();
+  ctx.direction = opts.dir || "rtl";
+  ctx.font = opts.font || font(700, 60);
+  ctx.textAlign = opts.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.globalAlpha *= opts.alpha ?? 1;
+  if (opts.letter) ctx.letterSpacing = opts.letter + "px";
+  if (opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = opts.glowBlur ?? 30; }
+  if (opts.stroke) { ctx.lineWidth = opts.strokeW || 6; ctx.strokeStyle = opts.stroke; ctx.lineJoin = "round"; ctx.strokeText(str, x, y); }
+  ctx.fillStyle = opts.color || C.white;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+function goldFill(y, h) {
+  const g = ctx.createLinearGradient(0, y - h / 2, 0, y + h / 2);
+  g.addColorStop(0, "#FFF1B8"); g.addColorStop(0.45, C.gold); g.addColorStop(0.55, "#D9A23A"); g.addColorStop(1, "#8F6420");
+  return g;
+}
+
+// text that reveals with a mask wipe from right to left plus a vertical slide
+function wipeText(str, x, y, t, start, opts = {}) {
+  const k = eOutExpo(prog(t, start, opts.dur ?? 0.8));
+  if (k <= 0) return;
+  ctx.save();
+  ctx.font = opts.font || font(900, 100);
+  const w = ctx.measureText(str).width + 80;
+  ctx.beginPath();
+  ctx.rect(x + w / 2 - w * k, y - 200, w * k, 400);
+  ctx.clip();
+  text(str, x, y + (1 - k) * 40, opts);
+  ctx.restore();
+}
+
+// ---------- shared layers ----------
+const dust = (() => {
+  const r = rng(11); const out = [];
+  for (let i = 0; i < 110; i++) out.push({ x: r() * W, y: r() * H, s: 0.8 + r() * 2.6, v: 10 + r() * 40, p: r() * 6.28, d: r() });
+  return out;
+})();
+function drawDust(t, color, alpha = 1, up = true) {
+  ctx.save();
+  for (const d of dust) {
+    const y = ((d.y - (up ? 1 : -1) * d.v * t) % H + H) % H;
+    const x = d.x + Math.sin(t * 0.7 + d.p) * 25;
+    const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * 2 + d.p));
+    ctx.globalAlpha = alpha * tw * (0.3 + d.d * 0.7);
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(x, y, d.s, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function lightStreaks(t, alpha) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (let i = 0; i < 4; i++) {
+    const x = ((t * (180 + i * 70) + i * 600) % (W + 1200)) - 600;
+    const g = ctx.createLinearGradient(x - 300, 0, x + 300, 0);
+    g.addColorStop(0, "rgba(140,200,255,0)");
+    g.addColorStop(0.5, `rgba(180,220,255,${0.10 * alpha})`);
+    g.addColorStop(1, "rgba(140,200,255,0)");
+    ctx.fillStyle = g;
+    ctx.save(); ctx.translate(x, CY); ctx.rotate(-0.35); ctx.fillRect(-300, -900, 600, 1800); ctx.restore();
+  }
+  ctx.restore();
+}
+
+function vignette(strength = 0.65) {
+  const g = ctx.createRadialGradient(CX, CY, 350, CX, CY, 1150);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, `rgba(0,0,0,${strength})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+// film grain: a few pre-baked noise tiles cycled per frame
+const grain = (() => {
+  const tiles = [];
+  for (let n = 0; n < 4; n++) {
+    const c = document.createElement("canvas"); c.width = c.height = 256;
+    const g = c.getContext("2d"); const d = g.createImageData(256, 256); const r = rng(100 + n);
+    for (let i = 0; i < d.data.length; i += 4) { const v = r() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 18; }
+    g.putImageData(d, 0, 0); tiles.push(c);
+  }
+  return tiles;
+})();
+function drawGrain(t) {
+  ctx.save();
+  ctx.globalCompositeOperation = "overlay";
+  ctx.fillStyle = ctx.createPattern(grain[Math.floor(t * 24) % 4], "repeat");
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+function flash(k, color = "255,255,255") {
+  if (k <= 0) return;
+  ctx.fillStyle = `rgba(${color},${k})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function shockwave(x, y, t, start, maxR = 900, color = "255,255,255") {
+  const k = prog(t, start, 0.9);
+  if (k <= 0 || k >= 1) return;
+  ctx.save();
+  ctx.strokeStyle = `rgba(${color},${(1 - k) * 0.9})`;
+  ctx.lineWidth = 30 * (1 - k) + 2;
+  ctx.beginPath(); ctx.arc(x, y, eOutCubic(k) * maxR, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+const sparks = (() => {
+  const r = rng(23); const out = [];
+  for (let i = 0; i < 70; i++) { const a = r() * Math.PI * 2; out.push({ a, v: 500 + r() * 1300, l: 20 + r() * 60, g: r() < 0.5 }); }
+  return out;
+})();
+function drawSparks(x, y, t, start) {
+  const age = t - start;
+  if (age < 0 || age > 1.1) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  for (const s of sparks) {
+    const d = s.v * (1 - Math.exp(-age * 3)) / 3;
+    const px = x + Math.cos(s.a) * d, py = y + Math.sin(s.a) * d + 200 * age * age;
+    ctx.strokeStyle = s.g ? `rgba(255,205,90,${1 - age / 1.1})` : `rgba(160,210,255,${1 - age / 1.1})`;
+    ctx.lineWidth = 4 * (1 - age / 1.1) + 1;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - Math.cos(s.a) * s.l, py - Math.sin(s.a) * s.l); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function crescent(x, y, r, color, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.fillStyle = color;
+  ctx.shadowColor = color; ctx.shadowBlur = 30;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.arc(x + r * 0.42, y - r * 0.18, r * 0.86, 0, Math.PI * 2, true);
+  ctx.fill("evenodd");
+  ctx.restore();
+}
+
+function star(x, y, r, color, alpha = 1, rot = 0) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.translate(x, y); ctx.rotate(rot);
+  ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 20;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const rr = i % 2 ? r * 0.25 : r;
+    ctx.lineTo(Math.cos(i * Math.PI / 4) * rr, Math.sin(i * Math.PI / 4) * rr);
+  }
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- scene 1: intro title ----------
+function sceneIntro(t) {
+  const zoom = 1.18 - 0.12 * eOutCubic(prog(t, 0, 3.4));
+  drawCover(IMG.grad, zoom, CX, CY, Math.sin(t * 0.4) * 20);
+  ctx.fillStyle = "rgba(5,10,30,0.35)"; ctx.fillRect(0, 0, W, H);
+  lightStreaks(t, 1);
+  drawDust(t, "#CFE6FF", 0.7);
+
+  // title flies toward camera at the end
+  const out = eInExpo(prog(t, 2.9, 0.5));
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.scale(1 + out * 3, 1 + out * 3);
+  ctx.globalAlpha = 1 - out;
+  ctx.translate(-CX, -CY);
+
+  // small kicker
+  const kk = eOutCubic(prog(t, 0.3, 0.6));
+  text("الموعد الأكبر", CX, CY - 150, { font: font(700, 44), alpha: kk, color: C.sky, letter: 6 * kk });
+
+  // main words pop in with overshoot
+  ctx.font = font(900, 170);
+  const wA = ctx.measureText("ليلة").width, wB = ctx.measureText("الكلاسيكو").width, gap = 50;
+  const total = wA + wB + gap;
+  // RTL: first word sits on the right
+  const words = [["ليلة", CX + total / 2 - wA / 2, 0.55], ["الكلاسيكو", CX - total / 2 + wB / 2, 0.8]];
+  for (const [w, x, s] of words) {
+    const k = prog(t, s, 0.7);
+    if (k <= 0) continue;
+    const sc = eOutBack(k, 2.2);
+    ctx.save();
+    ctx.translate(x, CY);
+    ctx.scale(sc, sc);
+    ctx.filter = `blur(${(1 - eOutCubic(k)) * 14}px)`;
+    text(w, 0, 0, { font: font(900, 170), alpha: clamp(k * 3), glow: "rgba(120,190,255,0.8)", glowBlur: 40 });
+    ctx.restore();
+  }
+  // underline swipe
+  const u = eOutExpo(prog(t, 1.3, 0.7));
+  if (u > 0) {
+    const g = ctx.createLinearGradient(CX - 520, 0, CX + 520, 0);
+    g.addColorStop(0, C.barcaBlue); g.addColorStop(0.5, C.white); g.addColorStop(1, C.gold);
+    ctx.fillStyle = g;
+    ctx.fillRect(CX + 520 - 1040 * u, CY + 120, 1040 * u, 8);
+  }
+  wipeText("برشلونة × ريال مدريد", CX, CY + 195, t, 1.6, { font: font(700, 54), color: C.white, dur: 0.9 });
+  ctx.restore();
+}
+
+// ---------- scene 2: the clash ----------
+function sceneClash(t) {
+  const lt = t - 3.4;
+  drawCover(IMG.grad, 1.05 + lt * 0.015, CX, CY, -40);
+  ctx.fillStyle = "rgba(4,8,24,0.55)"; ctx.fillRect(0, 0, W, H);
+
+  // diagonal team-colour split opening up
+  const open = eOutExpo(prog(t, 3.45, 0.8));
+  ctx.save();
+  ctx.globalAlpha = 0.55 * open;
+  ctx.globalCompositeOperation = "screen";
+  const tilt = 160;
+  const gL = ctx.createLinearGradient(0, 0, CX, 0);
+  gL.addColorStop(0, C.barcaBlue); gL.addColorStop(1, C.garnet);
+  ctx.fillStyle = gL;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(CX * open + tilt, 0); ctx.lineTo(CX * open - tilt, H); ctx.lineTo(0, H); ctx.fill();
+  const gR = ctx.createLinearGradient(CX, 0, W, 0);
+  gR.addColorStop(0, "#E9EEF7"); gR.addColorStop(1, C.goldDeep);
+  ctx.fillStyle = gR;
+  ctx.beginPath(); ctx.moveTo(W, 0); ctx.lineTo(W - CX * open + tilt, 0); ctx.lineTo(W - CX * open - tilt, H); ctx.lineTo(W, H); ctx.fill();
+  ctx.restore();
+
+  // divider light beam
+  const beam = prog(t, 3.9, 0.4) * (1 - prog(t, 7.4, 0.5));
+  if (beam > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.translate(CX, CY); ctx.rotate(Math.atan2(2 * tilt, H));
+    const g = ctx.createLinearGradient(-40, 0, 40, 0);
+    g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, `rgba(255,255,255,${0.9 * beam})`); g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g; ctx.fillRect(-40, -H, 80, H * 2 * eOutExpo(prog(t, 3.9, 0.4)));
+    ctx.restore();
+  }
+
+  drawDust(t, "#FFFFFF", 0.4);
+
+  // crests: fly in, collide at 4.6, bounce out to resting positions
+  const restX = 470, crestH = 420;
+  const hit = 4.6;
+  function crestPos(side, start) {
+    // side: -1 = left (Barça), +1 = right (Madrid)
+    const kIn = eOutCubic(prog(t, start, hit - start));
+    const xFrom = CX + side * 1300, xHit = CX + side * 210;
+    let x = lerp(xFrom, xHit, kIn);
+    const kBack = eOutElastic(prog(t, hit, 1.2));
+    if (t >= hit) x = lerp(xHit, CX + side * restX, kBack);
+    const rot = t < hit ? side * -0.5 * (1 - kIn) : side * 0.12 * Math.sin(prog(t, hit, 1.2) * Math.PI) * (1 - prog(t, hit, 1.2));
+    return { x, rot };
+  }
+  const float = (s) => Math.sin(t * 1.6 + s) * 10;
+  const outK = eInExpo(prog(t, 7.4, 0.6));
+  if (t >= 3.7) {
+    const b = crestPos(-1, 3.7), m = crestPos(1, 3.85);
+    const sc = 1 + 0.06 * Math.sin(prog(t, 5.8, 1.6) * Math.PI);
+    drawCentered(IMG.barca, b.x - outK * 900, CY - 30 + float(0), crestH * sc, { rot: b.rot, glow: "rgba(165,0,68,0.9)", glowBlur: 60 });
+    drawCentered(IMG.madrid, m.x + outK * 900, CY - 30 + float(2), crestH * 1.08 * sc, { rot: m.rot, glow: "rgba(242,193,78,0.9)", glowBlur: 60 });
+  }
+
+  // impact FX
+  shockwave(CX, CY - 30, t, hit, 1100);
+  shockwave(CX, CY - 30, t, hit + 0.12, 700, "242,193,78");
+  drawSparks(CX, CY - 30, t, hit);
+
+  // VS slam
+  const vk = prog(t, hit + 0.05, 0.45);
+  if (vk > 0) {
+    const sc = lerp(3.2, 1, eOutBack(vk, 1.4));
+    ctx.save();
+    ctx.translate(CX, CY - 30);
+    ctx.scale(sc * (1 - outK), sc * (1 - outK));
+    ctx.rotate(-0.08);
+    ctx.globalAlpha = clamp(vk * 2);
+    ctx.fillStyle = goldFill(0, 200);
+    ctx.font = font(900, 210);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.direction = "ltr";
+    ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10;
+    ctx.lineWidth = 10; ctx.strokeStyle = "#1A0F04"; ctx.strokeText("VS", 0, 0);
+    ctx.fillText("VS", 0, 0);
+    ctx.restore();
+  }
+
+  // team names
+  const nameA = win(t, 5.2, 7.6, 0.5, 0.4);
+  text("برشلونة", CX - restX, CY + 250 + (1 - eOutCubic(prog(t, 5.2, 0.5))) * 40, { font: font(900, 64), alpha: nameA, stroke: "rgba(10,15,40,0.85)", strokeW: 8, glow: "rgba(165,0,68,0.8)" });
+  text("ريال مدريد", CX + restX, CY + 250 + (1 - eOutCubic(prog(t, 5.35, 0.5))) * 40, { font: font(900, 64), alpha: nameA, stroke: "rgba(10,15,40,0.85)", strokeW: 8, glow: "rgba(242,193,78,0.8)" });
+  wipeText("مواجهة القمة الرمضانية", CX, 140, t, 5.6, { font: font(700, 50), color: C.gold, alpha: 1 - outK });
+}
+
+// ---------- scene 3: Ramadan frame ----------
+// image is cover-scaled 1.25x (1536x1024 -> 1920x1280, cropped 100px top/bottom)
+const RM = { arch: [962, 455], lanternA: [229, 487], lanternB: [327, 552], plaque: [957, 947] };
+function sceneRamadan(t) {
+  const lt = t - 8.0;
+  const zoom = lerp(1.35, 1.0, eOutCubic(prog(t, 8.0, 1.6))) + lt * 0.008;
+  ctx.save();
+  // camera move applied to everything that lives "inside" the frame
+  ctx.translate(CX, CY); ctx.scale(zoom, zoom); ctx.translate(-CX, -CY);
+  drawCover(IMG.ramadan);
+
+  // lantern glow flicker
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const [[x, y], s] of [[RM.lanternA, 0], [RM.lanternB, 1.7]]) {
+    const f = 0.75 + 0.15 * Math.sin(t * 9 + s) + 0.1 * Math.sin(t * 23 + s * 2);
+    const g = ctx.createRadialGradient(x, y, 10, x, y, 260);
+    g.addColorStop(0, `rgba(255,200,90,${0.55 * f})`);
+    g.addColorStop(0.4, `rgba(255,170,60,${0.18 * f})`);
+    g.addColorStop(1, "rgba(255,150,40,0)");
+    ctx.fillStyle = g; ctx.fillRect(x - 260, y - 260, 520, 520);
+  }
+  ctx.restore();
+
+  // sun rays from the right sky
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.translate(1720, 330);
+  for (let i = 0; i < 7; i++) {
+    const a = Math.PI * 0.62 + i * 0.13 + Math.sin(t * 0.5 + i) * 0.02;
+    ctx.save(); ctx.rotate(a);
+    const g = ctx.createLinearGradient(0, 0, 900, 0);
+    g.addColorStop(0, "rgba(255,220,140,0.16)"); g.addColorStop(1, "rgba(255,220,140,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(900, -30); ctx.lineTo(900, 30); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // content inside the arch
+  const [ax, ay] = RM.arch;
+  const ck = eOutBack(prog(t, 8.7, 0.8), 1.6);
+  if (ck > 0) {
+    crescent(ax, ay - 230, 46 * ck, C.goldDeep, 1);
+    star(ax + 70, ay - 270, 16 * ck, C.goldDeep, 1, t);
+  }
+  // ornamental lines either side of the title
+  const lk = eOutExpo(prog(t, 9.2, 0.9));
+  ctx.save();
+  ctx.strokeStyle = C.goldDeep; ctx.lineWidth = 3; ctx.globalAlpha = 0.9;
+  for (const s of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(ax + s * 60, ay + 40); ctx.lineTo(ax + s * (60 + 260 * lk), ay + 40); ctx.stroke();
+    if (lk > 0.9) star(ax + s * (60 + 260 * lk), ay + 40, 10, C.goldDeep, (lk - 0.9) * 10, 0);
+  }
+  ctx.restore();
+
+  // title with a gold gradient, revealed by a wipe
+  const tk = eOutExpo(prog(t, 8.9, 1.1));
+  if (tk > 0) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(ax + 380 - 760 * tk, ay - 220, 760 * tk, 260); ctx.clip();
+    ctx.font = font(900, 130); ctx.direction = "rtl"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(90,55,10,0.55)"; ctx.shadowBlur = 12; ctx.shadowOffsetY = 5;
+    ctx.fillStyle = goldFill(ay - 80, 130);
+    ctx.fillText("رمضان كريم", ax, ay - 85);
+    ctx.restore();
+    // shimmer sweep across the title
+    const sh = prog(t, 10.2, 1.0);
+    if (sh > 0 && sh < 1) {
+      ctx.save();
+      ctx.font = font(900, 130); ctx.direction = "rtl"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const sx = ax - 500 + 1000 * sh;
+      const g = ctx.createLinearGradient(sx - 80, 0, sx + 80, 0);
+      g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,240,0.95)"); g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g; ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.7;
+      ctx.fillText("رمضان كريم", ax, ay - 85);
+      ctx.restore();
+    }
+  }
+  wipeText("كلاسيكو رمضان يجمعنا", ax, ay + 110, t, 9.6, { font: font(700, 56), color: "#3B2A10", dur: 0.9 });
+
+  // crests appear small inside the arch
+  for (const [im, s, d] of [[IMG.barca, 1, 10.3], [IMG.madrid, -1, 10.45]]) {
+    const k = eOutBack(prog(t, d, 0.6), 2);
+    if (k > 0) drawCentered(im, ax + s * 210, ay + 245, 120 * k * (im === IMG.madrid ? 1.08 : 1), { glow: "rgba(90,55,10,0.4)", glowBlur: 16 });
+  }
+  if (t > 10.6) text("×", ax, ay + 245, { font: font(900, 60), color: C.goldDeep, alpha: prog(t, 10.6, 0.3), dir: "ltr" });
+
+  // plaque text
+  const [px, py] = RM.plaque;
+  const pk = eOutCubic(prog(t, 11.0, 0.6));
+  text("برعاية Signal", px, py + 14 + (1 - pk) * 20, { font: font(700, 44), alpha: pk, color: C.gold, glow: "rgba(242,193,78,0.6)", glowBlur: 18 });
+  ctx.restore();
+
+  drawDust(t, "#FFD98A", 0.75);
+  // warm grade
+  ctx.save();
+  ctx.globalCompositeOperation = "soft-light";
+  ctx.fillStyle = "rgba(255,190,100,0.25)"; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+// ---------- scene 4: product hero ----------
+const bubbles = (() => {
+  const r = rng(41); const out = [];
+  for (let i = 0; i < 45; i++) out.push({ x: r() * W, r: 6 + r() * 26, v: 90 + r() * 200, p: r() * 6.28, o: r() * H });
+  return out;
+})();
+const shineCanvas = document.createElement("canvas");
+function drawProduct(x, y, h, rot, shine) {
+  const im = IMG.product, w = h * im.width / im.height;
+  shineCanvas.width = Math.ceil(w); shineCanvas.height = Math.ceil(h);
+  const g = shineCanvas.getContext("2d");
+  g.drawImage(im, 0, 0, w, h);
+  if (shine > 0 && shine < 1) {
+    g.globalCompositeOperation = "source-atop";
+    const sx = -w * 0.4 + w * 1.8 * shine;
+    const lg = g.createLinearGradient(sx - 120, 0, sx + 120, h * 0.3);
+    lg.addColorStop(0, "rgba(255,255,255,0)"); lg.addColorStop(0.5, "rgba(255,255,255,0.75)"); lg.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = lg; g.fillRect(0, 0, w, h);
+  }
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot);
+  ctx.shadowColor = "rgba(0,20,60,0.55)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 30;
+  ctx.drawImage(shineCanvas, -w / 2, -h / 2);
+  ctx.restore();
+}
+
+function badge(str, x, y, t, start, color) {
+  const k = prog(t, start, 0.5);
+  if (k <= 0) return;
+  const sc = eOutBack(k, 2.4);
+  ctx.save();
+  ctx.translate(x, y); ctx.scale(sc, sc);
+  ctx.font = font(700, 38);
+  const w = ctx.measureText(str).width + 110;
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.shadowColor = "rgba(0,30,80,0.35)"; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8;
+  ctx.beginPath(); ctx.roundRect(-w / 2, -38, w, 76, 38); ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(w / 2 - 38, 0, 18, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 5; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(w / 2 - 46, 0); ctx.lineTo(w / 2 - 40, 7); ctx.lineTo(w / 2 - 29, -7); ctx.stroke();
+  ctx.restore();
+  text(str, x - 22 * sc, y, { font: font(700, 38 * sc), color: C.navy, alpha: clamp(k * 3) });
+}
+
+function sceneProduct(t) {
+  const lt = t - 13.4;
+  drawCover(IMG.grad, 1.1 + lt * 0.02, CX, CY, 60 - lt * 18, -30);
+  ctx.fillStyle = "rgba(8,25,70,0.25)"; ctx.fillRect(0, 0, W, H);
+
+  // freshness bubbles
+  ctx.save();
+  for (const b of bubbles) {
+    const y = H + 60 - ((b.o + b.v * Math.max(0, lt + 0.5)) % (H + 120));
+    const x = b.x + Math.sin(lt * 1.5 + b.p) * 30;
+    ctx.globalAlpha = 0.5 * prog(t, 13.5, 0.6);
+    ctx.strokeStyle = "rgba(220,240,255,0.9)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, b.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.beginPath(); ctx.arc(x - b.r * 0.35, y - b.r * 0.35, b.r * 0.22, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  const endK = eInOutCubic(prog(t, 17.8, 0.9));   // transition into the end card
+  // glow disc behind product
+  const gk = eOutCubic(prog(t, 13.6, 0.8));
+  const px = lerp(620, CX, endK), py = lerp(CY + 20, CY - 60, endK);
+  const rg = ctx.createRadialGradient(px, py, 20, px, py, 40 + 480 * gk);
+  rg.addColorStop(0, `rgba(255,255,255,${0.75 * gk})`); rg.addColorStop(0.5, `rgba(150,210,255,${0.25 * gk})`); rg.addColorStop(1, "rgba(150,210,255,0)");
+  ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+  // rotating ring
+  ctx.save();
+  ctx.translate(px, py); ctx.rotate(lt * 0.6);
+  if (gk <= 0) ctx.globalAlpha = 0;
+  ctx.strokeStyle = `rgba(255,255,255,${0.6 * gk})`; ctx.lineWidth = 3; ctx.setLineDash([24, 18]);
+  ctx.beginPath(); ctx.arc(0, 0, 420 * gk, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+
+  // product entrance: rises with a spin, then floats
+  const pk = eOutBack(prog(t, 13.7, 0.9), 1.3);
+  if (t > 13.7) {
+    const h = lerp(780, 600, endK) * lerp(0.6, 1, pk);
+    drawProduct(px, py + (1 - pk) * 500 + Math.sin(t * 1.8) * 10, h, (1 - pk) * -0.4 + Math.sin(t * 1.2) * 0.02,
+      prog(t, 14.8, 0.9) + (t > 18.4 ? prog(t, 18.4, 0.9) - 1 : 0));
+  }
+  drawSparks(px, py, t, 14.55);
+
+  // copy on the right (RTL)
+  const tx = 1430;
+  const fade = 1 - endK;
+  ctx.save();
+  ctx.globalAlpha = fade;
+  wipeText("ابتسامة الفوز", tx, 330, t, 14.3, { font: font(900, 120), color: C.white, glow: "rgba(30,80,200,0.7)", glowBlur: 30 });
+  wipeText("مع Signal في كل سهرة رمضانية", tx, 450, t, 14.7, { font: font(700, 46), color: "#E6F2FF" });
+  badge("حماية أقوى ١٠ مرات", tx, 590, t, 15.4, C.red);
+  badge("بالفلورايد المتطوّر", tx, 690, t, 15.65, C.blue);
+  badge("انتعاش يدوم طويلاً", tx, 790, t, 15.9, "#18A0FB");
+  ctx.restore();
+
+  // end card overlay
+  const ek = prog(t, 18.2, 0.6);
+  if (ek > 0) {
+    const s = eOutBack(ek, 1.8);
+    drawCentered(IMG.barca, CX - 470, CY - 60, 190 * s, { alpha: clamp(ek * 2), glow: "rgba(0,0,0,0.4)", glowBlur: 20 });
+    drawCentered(IMG.madrid, CX + 470, CY - 60, 205 * s, { alpha: clamp(ek * 2), glow: "rgba(0,0,0,0.4)", glowBlur: 20 });
+    text("رمضان كريم", CX, CY + 330, { font: font(900, 84), color: C.white, alpha: clamp(ek * 2), glow: "rgba(10,40,120,0.8)" });
+    text("شاهد الكلاسيكو… وابتسم", CX, CY + 410, { font: font(700, 42), color: C.gold, alpha: eOutCubic(prog(t, 18.6, 0.5)) });
+  }
+}
+
+// ---------- transitions ----------
+function zoomBlurTransition(t, at, render) {
+  // radial streak overlay on the incoming frame
+  const k = 1 - Math.abs(prog(t, at - 0.3, 0.6) * 2 - 1);
+  if (k <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.translate(CX, CY);
+  const r = rng(9);
+  for (let i = 0; i < 90; i++) {
+    const a = r() * Math.PI * 2, d0 = 100 + r() * 500, len = 300 + r() * 900 * k;
+    ctx.strokeStyle = `rgba(255,240,210,${0.35 * k})`; ctx.lineWidth = 1 + r() * 3;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * d0, Math.sin(a) * d0); ctx.lineTo(Math.cos(a) * (d0 + len), Math.sin(a) * (d0 + len)); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function irisReveal(t, start, dur, drawNext) {
+  const k = eInOutCubic(prog(t, start, dur));
+  if (k <= 0) return false;
+  const r = k * Math.hypot(CX, CY) * 1.05;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(CX, CY, r, 0, Math.PI * 2); ctx.clip();
+  drawNext(t);
+  ctx.restore();
+  if (k < 1) {
+    ctx.save();
+    ctx.strokeStyle = C.gold; ctx.lineWidth = 14; ctx.shadowColor = C.gold; ctx.shadowBlur = 40;
+    ctx.beginPath(); ctx.arc(CX, CY, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  return k >= 1;
+}
+
+// ---------- master ----------
+function render(t) {
+  ctx.save();
+  ctx.clearRect(0, 0, W, H);
+
+  // camera shake on impacts
+  const shake = (at, amt) => { const k = prog(t, at, 0.5); return k > 0 && k < 1 ? amt * (1 - k) : 0; };
+  const s = shake(4.6, 26) + shake(8.0, 10) + shake(14.55, 8);
+  if (s) ctx.translate(Math.sin(t * 97) * s, Math.cos(t * 83) * s);
+
+  if (t < 3.4) sceneIntro(t);
+  else if (t < 8.0) sceneClash(t);
+  else if (t < 13.4) {
+    sceneRamadan(t);
+  } else {
+    sceneProduct(t);
+  }
+  // iris from Ramadan into product (draws product on top during 13.0–13.6)
+  if (t >= 12.9 && t < 13.4) irisReveal(t, 12.9, 0.5, sceneProduct);
+
+  zoomBlurTransition(t, 8.0);
+  ctx.restore();
+
+  // flashes
+  flash(Math.max(0, 1 - Math.abs(t - 3.4) / 0.18) * 0.9);            // intro -> clash
+  flash(Math.max(0, 1 - prog(t, 4.6, 0.35)) * (t >= 4.6 ? 0.85 : 0)); // impact
+  flash(Math.max(0, 1 - Math.abs(t - 8.0) / 0.22), "255,236,200");    // clash -> Ramadan
+  flash(Math.max(0, 1 - prog(t, 14.55, 0.3)) * (t >= 14.55 ? 0.35 : 0), "220,240,255");
+
+  vignette(t >= 8 && t < 13.4 ? 0.55 : 0.7);
+  drawGrain(t);
+
+  // fade in / out
+  flash(1 - prog(t, 0, 0.5), "0,0,0");
+  flash(prog(t, 19.4, 0.6), "0,0,0");
+}
+
+window.render = render;
+window.DURATION = DURATION;
+window.ready = ready;
+</script>
+</body>
+</html>
