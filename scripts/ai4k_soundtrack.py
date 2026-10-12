@@ -1,4 +1,6 @@
-"""Soundtrack for src/ai-4k.html (31 s, 110 BPM): airy synth pads, arpeggios and digital hits on each cue."""
+"""Soundtrack for src/ai-4k.html (31 s, 110 BPM): airy synth pads, arpeggios and digital hits on each cue,
+with the Arabic voice-over placed line by line and the music ducked underneath."""
+import subprocess
 import wave
 from pathlib import Path
 
@@ -7,7 +9,24 @@ import numpy as np
 SR = 44100
 DUR = 31.0
 BEAT = 60 / 110
-OUT = Path(__file__).resolve().parent.parent / "output" / "ai-4k-soundtrack.wav"
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "output" / "ai-4k-soundtrack.wav"
+# Arabic voice-over (ElevenLabs, voice "Rawi", eleven_multilingual_v2), one take with pauses between phrases
+VO = ROOT / "output" / "voice" / "ai-4k-vo.mp3"
+# (start, end) of each phrase inside VO -> time it lands in the video
+VO_LINES = [
+    ((0.00, 1.16), 1.50),    # الذكاء الاصطناعي
+    ((1.59, 2.93), 4.60),    # ما هو الذكاء الاصطناعي؟
+    ((3.36, 5.14), 5.85),    # أنظمة تتعلّم من البيانات
+    ((5.44, 7.78), 7.65),    # لتفهم وتتوقّع وتتّخذ القرار
+    ((8.19, 8.82), 10.40),   # كيف يعمل؟
+    ((9.28, 10.20), 11.00),  # بيانات ضخمة
+    ((10.55, 11.21), 11.95), # ثم تدريب
+    ((11.51, 12.80), 12.65), # ثم نموذج يُجيب
+    ((13.30, 17.81), 16.00), # تعلّم الآلة، والتعلّم العميق، والذكاء التوليدي... عائلة واحدة
+    ((18.35, 22.77), 21.40), # نراه اليوم في الطب، والتعليم، والسيارات الذاتية، والترجمة
+    ((23.33, 26.48), 27.20), # المستقبل يُكتب الآن... فاستخدمه بوعي
+]
 
 n = int(SR * DUR)
 t = np.arange(n) / SR
@@ -150,6 +169,25 @@ place(impact(2.6), 26.9, 1.1)
 
 mix = np.stack([L, R], axis=1)
 mix = np.tanh(mix * 1.3) * 0.8
+
+if VO.exists():
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(VO), "-f", "s16le", "-ac", "1", "-ar", str(SR), "-"],
+                         check=True, capture_output=True).stdout
+    vo_src = np.frombuffer(raw, dtype=np.int16).astype(np.float64) / 32768
+    voice = np.zeros(n)
+    for (a, b), at in VO_LINES:
+        seg = vo_src[int(a * SR):int(b * SR)].copy()
+        fade = int(0.03 * SR)
+        seg[:fade] *= np.linspace(0, 1, fade)
+        seg[-fade:] *= np.linspace(1, 0, fade)
+        i = int(at * SR)
+        voice[i:i + len(seg)] += seg[: n - i]
+    # duck the music under the voice with a smoothed envelope
+    win = int(0.3 * SR)
+    level = np.convolve(np.abs(voice), np.ones(win) / win, mode="same")
+    duck = 1 - 0.6 * np.clip(level / 0.03, 0, 1)
+    mix = mix * duck[:, None] * 0.8 + voice[:, None] * 1.15
+    mix /= max(1.0, np.abs(mix).max() / 0.95)
 mix *= np.clip((DUR - t) / 1.6, 0, 1)[:, None]
 pcm = (mix * 32767).astype(np.int16)
 
