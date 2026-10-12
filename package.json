@@ -1,0 +1,47 @@
+{
+  "name": "motion-projects",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "audio": "python3 scripts/soundtrack.py",
+    "preview": "node scripts/render.mjs --preview",
+    "render": "node scripts/render.mjs",
+    "grunge:audio": "python3 scripts/grunge-soundtrack.py",
+    "grunge:render": "node scripts/render.mjs --src src/grunge-titles.html --audio output/grunge-soundtrack.wav --out output/grunge-titles.mp4",
+    "ad:audio": "python3 scripts/ad_soundtrack.py",
+    "ad:preview": "node scripts/render.mjs --src src/ad.html --preview --times 0.9,1.3,1.8,2.5,3.2,4.5,7,9.6",
+    "ad:render": "node scripts/render.mjs --src src/ad.html --audio output/ad_soundtrack.wav --out output/ad.mp4",
+    "ai:audio": "python3 scripts/soundtrack_ai.py",
+    "ai:preview": "node scripts/render.mjs --src src/ai-tool.html --preview --times 1.5,4.2,7.4,8.9,10.8,14",
+    "ai:render": "node scripts/render.mjs --src src/ai-tool.html --audio output/ai-tool-soundtrack.wav --out output/ai-tool.mp4",
+    "calm:audio": "python3 scripts/calm_music.py",
+    "calm:preview": "node scripts/render.mjs --src src/calm.html --preview --times 1,3.5,7,9,12,15,17.5",
+    "calm:render": "node scripts/render.mjs --src src/calm.html --audio output/calm.wav --out output/calm.mp4",
+    "cyber:audio": "python3 scripts/cyber_soundtrack.py",
+    "cyber:preview": "node scripts/render.mjs --src src/cyber.html --preview --times 1,2.6,3.8,6.5,11.5,15,18.3,21",
+    "cyber:render": "node scripts/render.mjs --src src/cyber.html --audio output/cyber-soundtrack.wav --out output/cyber.mp4",
+    "compare:audio": "python3 scripts/compare_soundtrack.py",
+    "compare:preview": "node scripts/render.mjs --src src/compare.html --preview --times 1.2,2.5,5.5,8.8,12.8,17.5,20.5,23.8",
+    "compare:render": "node scripts/render.mjs --src src/compare.html --audio output/compare-soundtrack.wav --out output/compare.mp4",
+    "clasico:audio": "python3 scripts/clasico_soundtrack.py",
+    "clasico:preview": "node scripts/render.mjs --src src/clasico.html --preview --times 0.9,1.8,3.1,4.0,6.0,8.4,10.5,13.0,14.2",
+    "clasico:render": "node scripts/render.mjs --src src/clasico.html --audio output/clasico-soundtrack.wav --out output/clasico.mp4",
+    "iraq-uae:audio": "python3 scripts/iraq-uae-soundtrack.py",
+    "iraq-uae:preview": "node scripts/render.mjs --src src/iraq-uae.html --preview --times 1.5,5.5,8.6,12.8,17,21",
+    "iraq-uae:render": "node scripts/render.mjs --src src/iraq-uae.html --audio output/iraq-uae.wav --out output/iraq-uae.mp4",
+    "bein:audio": "python3 scripts/bein_soundtrack.py",
+    "bein:preview": "node scripts/render.mjs --src src/bein.html --preview --times 2.8,6,9.2,16.5,21.3,26.5,32",
+    "bein:render": "node scripts/render.mjs --src src/bein.html --audio output/bein-soundtrack.wav --out output/bein.mp4",
+    "ai4k:audio": "python3 scripts/ai4k_soundtrack.py",
+    "ai4k:preview": "node scripts/render.mjs --src src/ai-4k.html --preview --times 3.5,8.8,14.5,19.8,25,30",
+    "ai4k:render": "node scripts/render.mjs --src src/ai-4k.html --audio output/ai-4k-soundtrack.wav --out output/ai-4k.mp4",
+    "ramadan-clasico:audio": "python3 ramadan-clasico/soundtrack.py",
+    "ramadan-clasico:render": "node scripts/render.mjs --src ramadan-clasico/motion.html --audio output/ramadan-clasico-soundtrack.wav --out output/ramadan-clasico.mp4"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  }
+}

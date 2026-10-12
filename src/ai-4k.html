@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>الذكاء الاصطناعي 4K</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2190-21FF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2190-21FF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2190-21FF; }
+  html, body { margin: 0; background: #050B1A; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<!-- native 4K canvas; everything is laid out in 1920x1080 units and scaled x2 -->
+<canvas id="c" width="3840" height="2160"></canvas>
+<script>
+const SCALE = 2;
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 31;
+const C = {
+  bg: "#050B1A", panel: "rgba(12,24,48,0.82)", white: "#EEF6FF", muted: "#8FA6C8",
+  cyan: "#22D3EE", blue: "#3B82F6", violet: "#8B5CF6", pink: "#EC4899", lime: "#A3E635", amber: "#FBBF24",
+};
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eOutBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const font = (w, s) => `${w} ${s}px Cairo`;
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+
+function text(str, x, y, o = {}) {
+  ctx.save();
+  ctx.direction = o.dir || "rtl";
+  ctx.font = o.font || font(700, 60);
+  ctx.textAlign = o.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.globalAlpha *= o.alpha ?? 1;
+  if (o.spacing) ctx.letterSpacing = `${o.spacing}px`;
+  if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = o.blur ?? 30; }
+  if (o.grad) {
+    const m = ctx.measureText(str).width;
+    const left = o.align === "right" ? x - m : o.align === "left" ? x : x - m / 2;
+    const g = ctx.createLinearGradient(left, 0, left + m, 0);
+    o.grad.forEach((c, i) => g.addColorStop(i / (o.grad.length - 1), c));
+    ctx.fillStyle = g;
+  } else ctx.fillStyle = o.color || C.white;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+function riseText(str, x, y, k, size, o = {}) {
+  if (k <= 0) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, y - size * 0.85, W, size * 1.7); ctx.clip();
+  text(str, x, y + (1 - k) * size * 1.4, { font: font(o.weight || 900, size), ...o });
+  ctx.restore();
+}
+
+// typewriter for Arabic: reveal whole words right-to-left with a soft fade on the newest one
+function wordsIn(str, x, y, t, start, per, o = {}) {
+  const words = str.split(" ");
+  ctx.save();
+  ctx.font = o.font || font(700, 50);
+  ctx.direction = "rtl";
+  const sp = ctx.measureText(" ").width;
+  const ws = words.map(w => ctx.measureText(w).width);
+  const total = ws.reduce((a, b) => a + b, 0) + sp * (words.length - 1);
+  let cx = o.align === "right" ? x : x + total / 2;
+  words.forEach((w, i) => {
+    const k = eOutCubic(prog(t, start + i * per, 0.35));
+    if (k > 0) text(w, cx - ws[i] / 2, y + (1 - k) * 18, { ...o, align: "center", alpha: (o.alpha ?? 1) * k });
+    cx -= ws[i] + sp;
+  });
+  ctx.restore();
+}
+
+function glowLine(x1, y1, x2, y2, color, width, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round";
+  ctx.shadowColor = color; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.restore();
+}
+
+function shockwave(t, start, color, cx = CX, cy = CY, maxR = 700, dur = 1.0, width = 6) {
+  const k = prog(t, start, dur);
+  if (k <= 0 || k >= 1) return;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.globalAlpha = 1 - k; ctx.lineWidth = width * (1 - k) + 0.5;
+  ctx.beginPath(); ctx.arc(cx, cy, eOutCubic(k) * maxR, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- background: drifting neural mesh ----------
+const mesh = (() => { const r = rng(21), out = []; for (let i = 0; i < 70; i++) out.push({ x: r() * W, y: r() * H, vx: (r() - 0.5) * 14, vy: (r() - 0.5) * 14, p: r() * 6.3 }); return out; })();
+const motes = (() => { const r = rng(5), out = []; for (let i = 0; i < 90; i++) out.push({ x: r() * W, y: r() * H, s: 0.6 + r() * 1.8, v: 6 + r() * 20, p: r() * 6.3 }); return out; })();
+
+function drawBackground(t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  [[CX + Math.sin(t * 0.21) * 520, CY + Math.cos(t * 0.17) * 220, "#1D4ED8", 900],
+   [CX - Math.cos(t * 0.19) * 560, CY + Math.sin(t * 0.23) * 260, "#6D28D9", 760]].forEach(([x, y, c, r]) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, c + "40"); g.addColorStop(1, c + "00");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  });
+  // perspective floor grid
+  ctx.save();
+  ctx.strokeStyle = "rgba(34,211,238,0.07)"; ctx.lineWidth = 1;
+  const hy = 700;
+  for (let i = -20; i <= 20; i++) { ctx.beginPath(); ctx.moveTo(CX + i * 30, hy); ctx.lineTo(CX + i * 260, H + 40); ctx.stroke(); }
+  for (let i = 0; i < 10; i++) {
+    const k = ((i + (t * 0.35) % 1) / 10);
+    const y = hy + (H + 40 - hy) * k * k;
+    ctx.globalAlpha = k; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  ctx.restore();
+  // mesh
+  const pts = mesh.map(m => ({ x: ((m.x + m.vx * t) % W + W) % W, y: ((m.y + m.vy * t) % H + H) % H, p: m.p }));
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+    const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+    if (d < 190) { ctx.strokeStyle = `rgba(96,165,250,${0.12 * (1 - d / 190)})`; ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[j].x, pts[j].y); ctx.stroke(); }
+  }
+  pts.forEach(p => { ctx.fillStyle = `rgba(34,211,238,${0.18 + 0.14 * Math.sin(t * 2 + p.p)})`; ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); ctx.fill(); });
+  for (const m of motes) {
+    const y = (m.y - t * m.v + H * 10) % H;
+    ctx.fillStyle = `rgba(238,246,255,${0.08 + 0.12 * Math.sin(t * 1.3 + m.p)})`;
+    ctx.beginPath(); ctx.arc(m.x, y, m.s, 0, Math.PI * 2); ctx.fill();
+  }
+  const vg = ctx.createRadialGradient(CX, CY, 380, CX, CY, 1150);
+  vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.65)");
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+}
+
+// scan-line transition sweeping right -> left
+function scanWipe(t, start) {
+  const k = eInOutCubic(prog(t, start, 0.7));
+  if (k <= 0 || k >= 1) return;
+  const x = lerp(W + 100, -100, k);
+  ctx.save();
+  const g = ctx.createLinearGradient(x, 0, x + 420, 0);
+  g.addColorStop(0, "rgba(34,211,238,0.55)"); g.addColorStop(1, "rgba(34,211,238,0)");
+  ctx.fillStyle = g; ctx.fillRect(x, 0, 420, H);
+  ctx.fillStyle = "#E0FBFF"; ctx.shadowColor = C.cyan; ctx.shadowBlur = 30; ctx.fillRect(x - 2, 0, 4, H);
+  // glitch bars
+  const r = rng(Math.floor(t * 30) + 3);
+  for (let i = 0; i < 7; i++) { ctx.fillStyle = `rgba(139,92,246,${0.25 * r()})`; ctx.fillRect(x - 300 * r(), r() * H, 200 + 400 * r(), 4 + 14 * r()); }
+  ctx.restore();
+}
+
+// ---------- AI chip ----------
+function chip(cx, cy, s, t, alpha = 1, pulse = 0) {
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(s, s);
+  ctx.globalAlpha *= alpha;
+  // pins
+  ctx.strokeStyle = C.cyan; ctx.lineWidth = 6; ctx.lineCap = "round";
+  for (let i = -2; i <= 2; i++) {
+    const o = i * 34;
+    [[o, -110, o, -146], [o, 110, o, 146], [-110, o, -146, o], [110, o, 146, o]].forEach(([a, b, c, d]) => { ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.stroke(); });
+  }
+  ctx.shadowColor = C.cyan; ctx.shadowBlur = 40 + pulse * 40;
+  const g = ctx.createLinearGradient(-110, -110, 110, 110);
+  g.addColorStop(0, "#0E2A4A"); g.addColorStop(1, "#1E1B4B");
+  ctx.fillStyle = g; roundRect(-110, -110, 220, 220, 30); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 4; ctx.strokeStyle = C.cyan; ctx.stroke();
+  ctx.strokeStyle = "rgba(34,211,238,0.35)"; ctx.lineWidth = 2; roundRect(-88, -88, 176, 176, 20); ctx.stroke();
+  text("AI", 0, 4, { font: font(900, 112), dir: "ltr", grad: [C.cyan, C.violet], glow: "rgba(34,211,238,0.6)" });
+  ctx.restore();
+}
+
+// ---------- scene 1: title (0 - 4.6) ----------
+function scene1(t) {
+  if (t > 4.8) return;
+  const exit = eInCubic(prog(t, 4.2, 0.45));
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  ctx.translate(CX, CY); ctx.scale(1 + exit * 0.25, 1 + exit * 0.25); ctx.translate(-CX, -CY);
+
+  // circuit traces converge into the chip
+  const traces = [[-1, -0.5], [-1, -0.1], [-1, 0.22], [1, -0.55], [1, -0.15], [1, 0.25]];
+  traces.forEach(([sx, sy], i) => {
+    const k = eOutCubic(prog(t, 0.1 + i * 0.07, 1.0));
+    if (k <= 0) return;
+    const x0 = CX + sx * 1000, y0 = 330 + sy * 400, xm = CX + sx * 300, ym = y0, x1 = CX + sx * 150, y1 = 330 + sy * 60;
+    ctx.save();
+    ctx.strokeStyle = i % 2 ? C.violet : C.cyan; ctx.lineWidth = 3; ctx.globalAlpha *= 0.7;
+    ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.moveTo(x0, y0);
+    const seg1 = Math.abs(xm - x0), seg2 = Math.hypot(x1 - xm, y1 - ym), L = seg1 + seg2, d = k * L;
+    if (d <= seg1) ctx.lineTo(lerp(x0, xm, d / seg1), y0);
+    else { ctx.lineTo(xm, ym); ctx.lineTo(lerp(xm, x1, (d - seg1) / seg2), lerp(ym, y1, (d - seg1) / seg2)); }
+    ctx.stroke();
+    // travelling data spark
+    const sk = (t * 0.8 + i * 0.17) % 1;
+    if (k >= 1) {
+      const dd = sk * L;
+      const px = dd <= seg1 ? lerp(x0, xm, dd / seg1) : lerp(xm, x1, (dd - seg1) / seg2);
+      const py = dd <= seg1 ? y0 : lerp(ym, y1, (dd - seg1) / seg2);
+      ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  });
+
+  const kc = eOutBack(prog(t, 0.7, 0.8));
+  if (kc > 0) chip(CX, 330, kc, t, clamp(kc), 0.5 + 0.5 * Math.sin(t * 4));
+  shockwave(t, 1.05, C.cyan, CX, 330, 700, 1.1, 6);
+  shockwave(t, 1.2, C.violet, CX, 330, 820, 1.2, 4);
+
+  riseText("الذكاء الاصطناعي", CX, 640, eOutExpo(prog(t, 1.4, 0.9)), 150, { grad: [C.white, "#BFE9FF"] });
+  const ks = eOutCubic(prog(t, 2.1, 0.9));
+  text("ARTIFICIAL  INTELLIGENCE", CX, 770, { font: font(700, 34), dir: "ltr", color: C.cyan, alpha: ks, spacing: lerp(40, 14, ks) });
+  const kl = eOutCubic(prog(t, 2.3, 0.7));
+  glowLine(CX - 420 * kl, 830, CX + 420 * kl, 830, C.violet, 3, kl);
+  ctx.restore();
+}
+
+// ---------- scene 2: what is it (4.5 - 10.2) — neural network ----------
+const LAYERS = [4, 6, 6, 3];
+function netPos(li, ni) {
+  const x0 = 260, x1 = 900; // network sits on the left; text column on the right
+  const x = lerp(x0, x1, li / (LAYERS.length - 1));
+  const n = LAYERS[li], gap = 105;
+  return [x, 560 + (ni - (n - 1) / 2) * gap];
+}
+function scene2(t) {
+  if (t < 4.5 || t > 10.4) return;
+  const exit = eInCubic(prog(t, 9.8, 0.45));
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  ctx.translate(exit * 200, 0);
+
+  riseText("ما هو الذكاء الاصطناعي؟", CX, 150, eOutExpo(prog(t, 4.8, 0.8)), 84, {});
+
+  // connections
+  for (let l = 0; l < LAYERS.length - 1; l++) {
+    const k = eOutCubic(prog(t, 5.2 + l * 0.3, 0.6));
+    if (k <= 0) continue;
+    for (let a = 0; a < LAYERS[l]; a++) for (let b = 0; b < LAYERS[l + 1]; b++) {
+      const [x1, y1] = netPos(l, a), [x2, y2] = netPos(l + 1, b);
+      ctx.strokeStyle = `rgba(96,165,250,${0.22 * k})`; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(lerp(x1, x2, k), lerp(y1, y2, k)); ctx.stroke();
+    }
+  }
+  // signals flowing through the layers
+  if (t > 6.4) {
+    const r = rng(77);
+    for (let s = 0; s < 26; s++) {
+      const l = s % 3, a = Math.floor(r() * LAYERS[l]), b = Math.floor(r() * LAYERS[l + 1]);
+      const ph = ((t - 6.4) * 1.1 + r()) % 1;
+      const [x1, y1] = netPos(l, a), [x2, y2] = netPos(l + 1, b);
+      ctx.fillStyle = l === 2 ? C.pink : l === 1 ? C.violet : C.cyan;
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(lerp(x1, x2, ph), lerp(y1, y2, ph), 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  }
+  // nodes
+  LAYERS.forEach((n, l) => {
+    for (let i = 0; i < n; i++) {
+      const k = eOutBack(prog(t, 5.0 + l * 0.3 + i * 0.04, 0.5));
+      if (k <= 0) continue;
+      const [x, y] = netPos(l, i);
+      const act = 0.5 + 0.5 * Math.sin(t * 5 - l * 1.2 + i);
+      ctx.fillStyle = "#0B1730"; ctx.beginPath(); ctx.arc(x, y, 24 * k, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = [C.cyan, C.blue, C.violet, C.pink][l]; ctx.stroke();
+      ctx.fillStyle = ctx.strokeStyle; ctx.globalAlpha *= 0.3 + 0.7 * act;
+      ctx.beginPath(); ctx.arc(x, y, 11 * k, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1 - exit;
+    }
+  });
+  // layer labels
+  const kl = eOutCubic(prog(t, 6.3, 0.6));
+  text("مُدخلات", netPos(0, 0)[0], 900, { font: font(700, 30), color: C.muted, alpha: kl });
+  text("طبقات خفية", (netPos(1, 0)[0] + netPos(2, 0)[0]) / 2, 900, { font: font(700, 30), color: C.muted, alpha: kl });
+  text("مُخرجات", netPos(3, 0)[0], 900, { font: font(700, 30), color: C.muted, alpha: kl });
+
+  // definition column (right side)
+  const rx = 1760;
+  const lines = [
+    ["أنظمة حاسوبية", C.white, 6.0],
+    ["تتعلّم من البيانات", C.cyan, 6.6],
+    ["لتفهم وتتوقّع", C.white, 7.2],
+    ["وتتّخذ القرار", C.violet, 7.8],
+  ];
+  lines.forEach(([s, col, at], i) => {
+    const k = eOutExpo(prog(t, at, 0.7));
+    if (k <= 0) return;
+    ctx.save(); ctx.beginPath(); ctx.rect(1000, 380 + i * 115 - 60, W, 120); ctx.clip();
+    text(s, rx, 380 + i * 115 + (1 - k) * 110, { font: font(900, 78), color: col, align: "right" });
+    ctx.restore();
+  });
+  const kb = eOutCubic(prog(t, 6.0, 2.2));
+  ctx.fillStyle = C.cyan; roundRect(rx + 30, 320, 8, 470 * kb, 4); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- icons ----------
+function icon(type, s, t, color) {
+  ctx.save();
+  ctx.scale(s, s);
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 6; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  const P = () => { ctx.beginPath(); };
+  if (type === "data") {
+    for (let i = 0; i < 3; i++) { P(); ctx.ellipse(0, -36 + i * 34, 48, 15, 0, 0, Math.PI * 2); ctx.stroke(); }
+    P(); ctx.moveTo(-48, -36); ctx.lineTo(-48, 32); ctx.moveTo(48, -36); ctx.lineTo(48, 32); ctx.stroke();
+    // binary sparkle
+    const r = rng(Math.floor(t * 6) + 1);
+    for (let i = 0; i < 5; i++) text(r() > 0.5 ? "1" : "0", -40 + i * 20, -78 - r() * 20, { font: font(700, 20), dir: "ltr", color, alpha: 0.6 });
+  } else if (type === "train") {
+    ctx.save(); ctx.rotate(t * 1.4);
+    for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); ctx.fillRect(-9, -56, 18, 18); }
+    P(); ctx.arc(0, 0, 42, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    P(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
+  } else if (type === "model") {
+    roundRect(-40, -40, 80, 80, 14); ctx.stroke();
+    for (let i = -1; i <= 1; i++) { P(); ctx.moveTo(i * 22, -40); ctx.lineTo(i * 22, -58); ctx.moveTo(i * 22, 40); ctx.lineTo(i * 22, 58); ctx.moveTo(-40, i * 22); ctx.lineTo(-58, i * 22); ctx.moveTo(40, i * 22); ctx.lineTo(58, i * 22); ctx.stroke(); }
+    ctx.globalAlpha *= 0.5 + 0.5 * Math.sin(t * 6); P(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
+  } else if (type === "health") {
+    P(); ctx.moveTo(0, 44); ctx.bezierCurveTo(-70, -4, -40, -66, 0, -30); ctx.bezierCurveTo(40, -66, 70, -4, 0, 44); ctx.stroke();
+    const off = (t * 80) % 160;
+    ctx.save(); P(); ctx.rect(-70, -70, 140, 140); ctx.clip();
+    ctx.strokeStyle = C.white; ctx.lineWidth = 4; P();
+    for (let x = -80; x <= 80; x += 4) { const u = ((x + off) % 80 + 80) % 80; const y = u > 30 && u < 36 ? -26 : u >= 36 && u < 42 ? 22 : 0; x === -80 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+    ctx.stroke(); ctx.restore();
+  } else if (type === "edu") {
+    P(); ctx.moveTo(-62, -12); ctx.lineTo(0, -40); ctx.lineTo(62, -12); ctx.lineTo(0, 16); ctx.closePath(); ctx.fill();
+    P(); ctx.moveTo(-36, 2); ctx.lineTo(-36, 32); ctx.quadraticCurveTo(0, 52, 36, 32); ctx.lineTo(36, 2); ctx.stroke();
+    P(); ctx.moveTo(54, -10); ctx.lineTo(54, 30); ctx.stroke(); P(); ctx.arc(54, 34 + Math.sin(t * 4) * 3, 6, 0, Math.PI * 2); ctx.fill();
+  } else if (type === "car") {
+    P(); ctx.moveTo(-66, 18); ctx.lineTo(-66, -4); ctx.lineTo(-40, -8); ctx.lineTo(-22, -34); ctx.lineTo(26, -34); ctx.lineTo(46, -8); ctx.lineTo(66, -2); ctx.lineTo(66, 18); ctx.closePath(); ctx.stroke();
+    [-38, 38].forEach(x => { P(); ctx.arc(x, 20, 14, 0, Math.PI * 2); ctx.fill(); });
+    // sensor waves
+    for (let i = 0; i < 3; i++) { const ph = (t * 1.5 + i / 3) % 1; ctx.globalAlpha = 1 - ph; P(); ctx.arc(70, -6, 10 + ph * 34, -0.6, 0.6); ctx.stroke(); }
+  } else if (type === "chat") {
+    roundRect(-62, -48, 124, 80, 22); ctx.stroke();
+    P(); ctx.moveTo(-30, 32); ctx.lineTo(-44, 54); ctx.lineTo(-6, 32); ctx.stroke();
+    for (let i = 0; i < 3; i++) { ctx.globalAlpha = 0.3 + 0.7 * Math.max(0, Math.sin(t * 6 - i * 0.9)); P(); ctx.arc(-26 + i * 26, -8, 8, 0, Math.PI * 2); ctx.fill(); }
+  } else if (type === "translate") {
+    roundRect(-66, -50, 72, 66, 14); ctx.stroke(); roundRect(-6, -16, 72, 66, 14); ctx.fill();
+    text("A", -30, -18, { font: font(900, 40), dir: "ltr", color });
+    text("ع", 30, 14, { font: font(900, 42), color: C.bg });
+  } else if (type === "art") {
+    P(); ctx.moveTo(4, 50); ctx.bezierCurveTo(-70, 50, -70, -54, 0, -54); ctx.bezierCurveTo(64, -54, 70, 4, 34, 6); ctx.bezierCurveTo(14, 8, 18, 30, 26, 38); ctx.bezierCurveTo(30, 48, 18, 50, 4, 50); ctx.stroke();
+    [[-30, -22, C.pink], [-4, -36, C.amber], [24, -26, C.lime], [-36, 12, C.cyan]].forEach(([x, y, c]) => { ctx.fillStyle = c; P(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill(); });
+  }
+  ctx.restore();
+}
+
+// ---------- scene 3: how it works (10.2 - 15.8) ----------
+const STEPS = [
+  { name: "البيانات", sub: "ملايين الأمثلة", icon: "data", col: C.cyan },
+  { name: "التدريب", sub: "اكتشاف الأنماط", icon: "train", col: C.violet },
+  { name: "النموذج", sub: "إجابات وتوقّعات", icon: "model", col: C.pink },
+];
+function scene3(t) {
+  if (t < 10.0 || t > 16.0) return;
+  const exit = eInCubic(prog(t, 15.4, 0.45));
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  riseText("كيف يعمل؟", CX, 160, eOutExpo(prog(t, 10.4, 0.8)), 96, {});
+
+  const xs = [CX + 560, CX, CX - 560], y = 560;
+  // connectors with flowing packets (right -> left)
+  for (let i = 0; i < 2; i++) {
+    const k = eOutCubic(prog(t, 11.6 + i * 0.8, 0.6));
+    if (k <= 0) continue;
+    const xa = xs[i] - 190, xb = xs[i + 1] + 190;
+    ctx.strokeStyle = "rgba(143,166,200,0.35)"; ctx.lineWidth = 4; ctx.setLineDash([10, 12]); ctx.lineDashOffset = t * 40;
+    ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(lerp(xa, xb, k), y); ctx.stroke(); ctx.setLineDash([]);
+    if (k >= 1) for (let p = 0; p < 4; p++) {
+      const ph = (t * 0.9 + p / 4) % 1;
+      ctx.fillStyle = STEPS[i].col; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.arc(lerp(xa, xb, ph), y, 6, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+    }
+  }
+  STEPS.forEach((s, i) => {
+    const at = 11.0 + i * 0.8;
+    const k = eOutBack(prog(t, at, 0.7));
+    if (k <= 0) return;
+    ctx.save();
+    ctx.translate(xs[i], y + (1 - clamp(k)) * 120);
+    ctx.globalAlpha *= clamp(k * 1.5);
+    // hexagon badge
+    ctx.save(); ctx.rotate(Math.sin(t * 0.8 + i) * 0.05);
+    ctx.beginPath();
+    for (let j = 0; j < 6; j++) { const a = Math.PI / 6 + j * Math.PI / 3; ctx[j ? "lineTo" : "moveTo"](Math.cos(a) * 170 * k, Math.sin(a) * 170 * k); }
+    ctx.closePath();
+    ctx.fillStyle = C.panel; ctx.shadowColor = s.col; ctx.shadowBlur = 40; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.lineWidth = 4; ctx.strokeStyle = s.col; ctx.stroke();
+    ctx.restore();
+    ctx.translate(0, -18); icon(s.icon, 1.25, t, s.col); ctx.translate(0, 18);
+    // step number
+    ctx.fillStyle = s.col; ctx.beginPath(); ctx.arc(120, -130, 30, 0, Math.PI * 2); ctx.fill();
+    text(String(i + 1), 120, -127, { font: font(900, 36), dir: "ltr", color: C.bg });
+    ctx.restore();
+    const kt = eOutCubic(prog(t, at + 0.3, 0.6));
+    text(s.name, xs[i], 800 + (1 - kt) * 30, { font: font(900, 66), alpha: kt });
+    text(s.sub, xs[i], 870 + (1 - kt) * 30, { font: font(700, 38), color: s.col, alpha: kt });
+  });
+  ctx.restore();
+}
+
+// ---------- scene 4: AI > ML > DL > GenAI (15.8 - 21.0) ----------
+const RINGS = [
+  { name: "الذكاء الاصطناعي", en: "AI", r: 420, col: C.blue },
+  { name: "تعلّم الآلة", en: "Machine Learning", r: 315, col: C.cyan },
+  { name: "التعلّم العميق", en: "Deep Learning", r: 215, col: C.violet },
+  { name: "الذكاء التوليدي", en: "Generative AI", r: 118, col: C.pink },
+];
+function scene4(t) {
+  if (t < 15.6 || t > 21.2) return;
+  const exit = eInCubic(prog(t, 20.6, 0.45));
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  const by = 1000; // circles share a bottom tangent
+  const cxr = CX + 400;
+  RINGS.forEach((g, i) => {
+    const k = eOutBack(prog(t, 16.0 + i * 0.6, 0.8));
+    if (k <= 0) return;
+    const r = g.r * k, cy = by - g.r;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cxr, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = g.col + "1F"; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = g.col; ctx.shadowColor = g.col; ctx.shadowBlur = 20; ctx.stroke();
+    ctx.restore();
+    // ring labels sit near the top of each circle
+    const kl = eOutCubic(prog(t, 16.3 + i * 0.6, 0.5));
+    const ly = cy - g.r + (i === 3 ? g.r : 48);
+    text(g.name, cxr, ly, { font: font(900, i === 3 ? 34 : 40), alpha: kl });
+    if (i < 3) text(g.en, cxr, ly + 40, { font: font(700, 22), dir: "ltr", color: g.col, alpha: kl, spacing: 2 });
+    shockwave(t, 16.1 + i * 0.6, g.col, cxr, cy, g.r + 80, 0.7, 4);
+  });
+  // explanation column on the left
+  const lx = 870;
+  riseText("عائلة واحدة", lx, 260, eOutExpo(prog(t, 16.0, 0.8)), 88, { align: "right" });
+  const notes = [
+    ["كل دائرة جزء من التي تحتويها", C.muted, 16.9],
+    ["التعلّم العميق يعتمد الشبكات العصبية", C.violet, 17.9],
+    ["والتوليدي يصنع نصاً وصوراً وصوتاً", C.pink, 18.9],
+  ];
+  notes.forEach(([s, col, at], i) => wordsIn(s, lx, 400 + i * 90, t, at, 0.09, { font: font(700, 40), color: col, align: "right" }));
+  ctx.restore();
+}
+
+// ---------- scene 5: applications (21.0 - 26.6) ----------
+const APPS = [
+  { name: "الطب", sub: "تشخيص أدق", icon: "health", col: C.pink },
+  { name: "التعليم", sub: "تعلّم مخصّص", icon: "edu", col: C.amber },
+  { name: "القيادة الذاتية", sub: "سيارات ترى الطريق", icon: "car", col: C.cyan },
+  { name: "المساعد الذكي", sub: "محادثة طبيعية", icon: "chat", col: C.violet },
+  { name: "الترجمة", sub: "بين عشرات اللغات", icon: "translate", col: C.lime },
+  { name: "الفن والتصميم", sub: "إبداع بلا حدود", icon: "art", col: C.blue },
+];
+function scene5(t) {
+  if (t < 20.8 || t > 26.8) return;
+  const exit = eInCubic(prog(t, 26.2, 0.45));
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  riseText("أين نراه اليوم؟", CX, 140, eOutExpo(prog(t, 21.1, 0.8)), 90, {});
+  const cw = 520, ch = 330, gx = 40, gy = 40;
+  APPS.forEach((a, i) => {
+    const col = i % 3, row = Math.floor(i / 3);
+    const x = CX + (1 - col) * (cw + gx), y = 440 + row * (ch + gy);
+    const k = eOutBack(prog(t, 21.6 + i * 0.22, 0.7));
+    if (k <= 0) return;
+    const ko = eInCubic(prog(t, 26.2 + (5 - i) * 0.03, 0.4));
+    ctx.save();
+    ctx.translate(x, y + (1 - clamp(k)) * 100); ctx.scale(lerp(0.8, 1, clamp(k)) * (1 - ko * 0.3), lerp(0.8, 1, clamp(k)) * (1 - ko * 0.3));
+    ctx.globalAlpha *= clamp(k * 1.5);
+    ctx.fillStyle = C.panel; ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
+    roundRect(-cw / 2, -ch / 2, cw, ch, 28); ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.save(); roundRect(-cw / 2, -ch / 2, cw, ch, 28); ctx.clip();
+    const g = ctx.createRadialGradient(cw / 2 - 110, -20, 0, cw / 2 - 110, -20, 260);
+    g.addColorStop(0, a.col + "33"); g.addColorStop(1, a.col + "00");
+    ctx.fillStyle = g; ctx.fillRect(-cw / 2, -ch / 2, cw, ch);
+    // scanning highlight
+    const sx = lerp(-cw, cw, ((t * 0.35 + i * 0.17) % 1));
+    const sg = ctx.createLinearGradient(sx - 60, 0, sx + 60, 0);
+    sg.addColorStop(0, "rgba(255,255,255,0)"); sg.addColorStop(0.5, "rgba(255,255,255,0.05)"); sg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = sg; ctx.fillRect(-cw / 2, -ch / 2, cw, ch);
+    ctx.restore();
+    ctx.lineWidth = 2; ctx.strokeStyle = a.col + "99"; roundRect(-cw / 2, -ch / 2, cw, ch, 28); ctx.stroke();
+    // icon on the right (RTL), text to its left
+    ctx.save(); ctx.translate(cw / 2 - 110, -10); icon(a.icon, 1.05, t, a.col); ctx.restore();
+    text(a.name, cw / 2 - 210, -30, { font: font(900, a.name.length > 12 ? 38 : a.name.length > 9 ? 44 : 52), align: "right" });
+    text(a.sub, cw / 2 - 210, 40, { font: font(700, 30), color: C.muted, align: "right" });
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ---------- scene 6: outro (26.6 - 31) ----------
+function scene6(t) {
+  if (t < 26.5) return;
+  const kc = eOutBack(prog(t, 26.7, 0.9));
+  shockwave(t, 26.9, C.cyan, CX, 330, 1000, 1.3, 8);
+  shockwave(t, 27.05, C.violet, CX, 330, 1100, 1.3, 5);
+  // orbiting rings
+  if (kc > 0) {
+    ctx.save(); ctx.translate(CX, 330);
+    [[200, 0.5, C.cyan], [250, -0.35, C.violet]].forEach(([r, sp, col]) => {
+      ctx.save(); ctx.rotate(t * sp); ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.globalAlpha = 0.6 * clamp(kc);
+      ctx.setLineDash([40, 22]); ctx.beginPath(); ctx.arc(0, 0, r * clamp(kc), 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = col; ctx.setLineDash([]); ctx.beginPath(); ctx.arc(r * clamp(kc), 0, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+    ctx.restore();
+    chip(CX, 330, kc * 0.9, t, clamp(kc), 0.5 + 0.5 * Math.sin(t * 3));
+  }
+  riseText("المستقبل يُكتب الآن", CX, 680, eOutExpo(prog(t, 27.4, 0.9)), 130, { grad: [C.cyan, C.white, C.violet] });
+  const ks = eOutCubic(prog(t, 28.2, 0.8));
+  text("استخدم الذكاء الاصطناعي بوعي ومسؤولية", CX, 810 + (1 - ks) * 20, { font: font(700, 50), color: C.muted, alpha: ks });
+  const kl = eOutCubic(prog(t, 28.6, 0.7));
+  glowLine(CX - 360 * kl, 880, CX + 360 * kl, 880, C.cyan, 3, kl);
+}
+
+// ---------- master ----------
+function render(t) {
+  ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+  ctx.save();
+  drawBackground(t);
+  scene1(t); scene2(t); scene3(t); scene4(t); scene5(t); scene6(t);
+  [4.35, 9.95, 15.55, 20.75, 26.35].forEach(s => scanWipe(t, s));
+  const f = Math.max(1 - prog(t, 0, 0.3), prog(t, DURATION - 0.9, 0.9));
+  if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = Promise.all([400, 700, 900].flatMap(w => [
+  document.fonts.load(`${w} 50px Cairo`, "الذكاء"),
+  document.fonts.load(`${w} 50px Cairo`, "AI 01"),
+])).then(() => true);
+
+if (!navigator.webdriver) {
+  const t0 = performance.now();
+  window.ready.then(() => {
+    const loop = now => { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>

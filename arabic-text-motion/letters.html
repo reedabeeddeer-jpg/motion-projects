@@ -1,0 +1,67 @@
+<!doctype html><html lang="ar"><meta charset="utf-8"><style>
+@font-face{font-family:Am;src:url(amiri.woff2);font-weight:700}
+*{margin:0;box-sizing:border-box}
+html{overflow:hidden;width:1920px;height:1080px}
+body{width:1920px;height:1080px;overflow:hidden;position:relative;background:#050507;direction:ltr}
+.abs{position:absolute;inset:0}
+#bg{position:absolute;left:-100px;top:-100px;width:2120px;height:1280px;background:radial-gradient(ellipse at 50% 48%,#1e2535 0%,#0b0e16 55%,#030305 100%)}
+#glow{position:absolute;left:50%;top:50%;width:1500px;height:420px;margin:-210px 0 0 -750px;background:radial-gradient(ellipse,rgba(214,170,90,.2),transparent 65%);filter:blur(30px)}
+#stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;direction:rtl;gap:60px}
+.word{position:relative;display:inline-block;font-family:Am;font-weight:700;font-size:190px;line-height:1.5;color:transparent;white-space:nowrap}
+.part{position:absolute;left:0;top:0;color:#f6ecd4;text-shadow:0 0 36px rgba(230,190,110,.35);will-change:transform}
+#rule{position:absolute;left:50%;top:700px;height:2px;transform:translateX(-50%);background:linear-gradient(90deg,transparent,#d6aa5a,transparent)}
+#vig{background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.8) 100%)}
+#grain{position:absolute;inset:0;width:1920px;height:1080px;opacity:.08;mix-blend-mode:overlay}
+</style><body>
+<div id="bg"></div><div id="glow"></div><div id="rule"></div><div id="stage"></div>
+<div id="vig" class="abs"></div><canvas id="grain" width="480" height="270"></canvas>
+<script>
+const TEXT="بالإصرار تُصنع المعجزات", D=10, STAG=0.085, DUR=1.0, T0=0.9;
+const cl=(x,a=0,b=1)=>Math.min(Math.max(x,a),b);
+const oQuint=x=>1-Math.pow(1-cl(x),5);
+const oBack=x=>{x=cl(x);const c1=2.4,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)};
+const stage=document.getElementById('stage');
+const parts=[]; // {el, k, last}
+function build(){
+ const seg=new Intl.Segmenter('ar',{granularity:'grapheme'});
+ let k=0;const words=TEXT.split(' ');
+ const total=words.reduce((n,w)=>n+[...seg.segment(w)].length,0);
+ words.forEach((w,wi)=>{
+  const wd=document.createElement('span');wd.className='word';wd.textContent=w;stage.appendChild(wd);
+  const tn=wd.firstChild,W=wd.getBoundingClientRect(),gs=[...seg.segment(w)];
+  const rects=gs.map(g=>{const r=document.createRange();r.setStart(tn,g.index);r.setEnd(tn,g.index+g.segment.length);const b=r.getBoundingClientRect();return [b.left-W.left,b.right-W.left]});
+  // clone per grapheme, clipped to that letter's horizontal span
+  gs.forEach((g,i)=>{
+   const p=document.createElement('span');p.className='part';p.textContent=w;
+   const x0=i==0&&false?-200:rects[i][0], x1=rects[i][1];
+   // widen edges by 0.6px to hide seams; first/last extend to cover diacritics/overhang
+   const isFirstVisual=rects[i][1]>=Math.max(...rects.map(r=>r[1]))-0.5, isLastVisual=rects[i][0]<=Math.min(...rects.map(r=>r[0]))+0.5;
+   const L=isLastVisual?-200:x0-0.6, Rr=isFirstVisual?-200:(W.width-x1)-0.6;
+   p.style.clipPath=`inset(-300px ${Rr}px -300px ${L}px)`;
+   wd.appendChild(p);parts.push({el:p,k:k,w:wi,last:k>=total-4});k++;});
+ });
+ parts.forEach(q=>q.n=total);
+}
+window.render=t=>{
+ parts.forEach(q=>{
+  // word 0: quick rise. LAST TWO WORDS: letters climb from deeper below, longer, with a gradual opacity fade-in.
+  // One smooth ease-out move, no overshoot / bounce.
+  const tail=q.w>=1;
+  const rise=tail?170:110, dur=tail?1.5:1.0;
+  const s=(t-T0-q.k*STAG)/dur;
+  const y=(1-oQuint(s))*rise;
+  const o=cl((t-9.0-q.k*0.02)/0.8);
+  const op=tail?Math.pow(cl(s),1.6):cl(s*3);        // slow opacity ramp tied to the rise
+  q.el.style.opacity=op*(1-o);
+  q.el.style.transform=`translateY(${y}px)`;
+ });
+ document.getElementById('glow').style.opacity=.4+.6*cl(t/3);
+ const r=oQuint((t-0.4)/1.6)*(1-cl((t-9)/0.8))*700;document.getElementById('rule').style.width=r+'px';
+ document.getElementById('bg').style.transform=`scale(${1+.05*t/D})`;
+ const c=document.getElementById('grain'),g=c.getContext('2d'),im=g.createImageData(480,270);let s=Math.floor(t*30)*9301+49297;
+ for(let i=0;i<im.data.length;i+=4){s=(s*9301+49297)%233280;im.data[i]=im.data[i+1]=im.data[i+2]=s/233280*255;im.data[i+3]=255}
+ g.putImageData(im,0,0);
+ document.body.style.opacity=cl(t/0.5)*cl((D-t)/0.5);
+};
+document.fonts.load('10px Am').then(()=>document.fonts.ready).then(()=>{build();window.ready=true});
+</script></body></html>
