@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>El Clásico</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #060A1A; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 15;
+// Match details shown on screen
+const MATCH = {
+  title: "الكلاسيكو",
+  home: "ريال مدريد", away: "برشلونة",
+  date: "الأحد 25 أكتوبر",
+  time: "10:00 مساءً",
+  channel: "beIN SPORTS",
+};
+const C = {
+  bg: "#060A1A", white: "#F7F8FC", muted: "#9AA3C7", gold: "#F2B705",
+  rmGold: "#FEBE10", rmBlue: "#00529F", fcbBlue: "#004D98", fcbRed: "#A50044", card: "rgba(14,20,44,0.86)",
+};
+// Real Madrid on the right (named first in RTL), Barcelona on the left
+const TEAMS = {
+  rm: { name: MATCH.home, x: CX + 470, dir: 1, glow: C.rmGold, img: null, src: "../assets/clasico/real-madrid.png" },
+  fcb: { name: MATCH.away, x: CX - 470, dir: -1, glow: C.fcbRed, img: null, src: "../assets/clasico/barcelona.png" },
+};
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eOutBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const font = (w, s) => `${w} ${s}px Cairo`;
+const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+
+function text(str, x, y, opts = {}) {
+  ctx.save();
+  ctx.direction = opts.dir || "rtl";
+  ctx.font = opts.font || font(700, 60);
+  ctx.textAlign = opts.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.globalAlpha *= opts.alpha ?? 1;
+  if (opts.spacing) ctx.letterSpacing = `${opts.spacing}px`;
+  if (opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = opts.glowBlur || 30; }
+  if (opts.gradient) {
+    const g = ctx.createLinearGradient(0, y - opts.size / 2, 0, y + opts.size / 2);
+    opts.gradient.forEach((c, i) => g.addColorStop(i / (opts.gradient.length - 1), c));
+    ctx.fillStyle = g;
+  } else ctx.fillStyle = opts.color || C.white;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+function crest(key, x, y, height, alpha = 1, rot = 0, glow = 0) {
+  const tm = TEAMS[key], img = tm.img;
+  if (!img || height <= 0) return;
+  const w = height * img.width / img.height;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.globalAlpha *= alpha;
+  if (glow > 0) { ctx.shadowColor = hexA(tm.glow, 0.8 * glow); ctx.shadowBlur = 80 * glow; }
+  ctx.drawImage(img, -w / 2, -height / 2, w, height);
+  ctx.restore();
+}
+
+function football(x, y, r, rot, alpha = 1) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha *= alpha;
+  const g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
+  g.addColorStop(0, "#FFFFFF"); g.addColorStop(1, "#C9CEDC");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.clip();
+  ctx.rotate(rot);
+  ctx.fillStyle = "#14182A";
+  const pent = (cx, cy, s, a0) => {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = a0 + i * Math.PI * 2 / 5;
+      ctx.lineTo(cx + Math.cos(a) * s, cy + Math.sin(a) * s);
+    }
+    ctx.closePath(); ctx.fill();
+  };
+  pent(0, 0, r * 0.32, -Math.PI / 2);
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + Math.PI / 5 + i * Math.PI * 2 / 5;
+    pent(Math.cos(a) * r * 0.92, Math.sin(a) * r * 0.92, r * 0.3, a + Math.PI / 5);
+  }
+  ctx.strokeStyle = "#14182A"; ctx.lineWidth = r * 0.04;
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + i * Math.PI * 2 / 5;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.32, Math.sin(a) * r * 0.32); ctx.lineTo(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function shockwave(t, start, color, x = CX, y = CY, maxR = 600, dur = 1.0, width = 8) {
+  const k = prog(t, start, dur);
+  if (k <= 0 || k >= 1) return;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.globalAlpha = 1 - k; ctx.lineWidth = width * (1 - k) + 1;
+  ctx.beginPath(); ctx.arc(x, y, eOutCubic(k) * maxR, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+function flash(t, start, dur = 0.3, a = 0.6) {
+  const k = prog(t, start, dur);
+  if (k <= 0 || k >= 1) return;
+  ctx.fillStyle = `rgba(255,255,255,${a * (1 - k)})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ---------- stadium background ----------
+const crowd = (() => {
+  const r = rng(21), out = [];
+  for (let i = 0; i < 160; i++) out.push({ x: r() * W, y: 330 + r() * 220, p: r() * 40, s: 1.5 + r() * 3 });
+  return out;
+})();
+const embers = (() => {
+  const r = rng(5), out = [];
+  for (let i = 0; i < 60; i++) out.push({ x: r() * W, y: r() * H, v: 20 + r() * 50, s: 1 + r() * 2.5, p: r() * 6 });
+  return out;
+})();
+const LIGHTS = [[180, 70, 0.55], [560, 40, 0.25], [W - 560, 40, -0.25], [W - 180, 70, -0.55]];
+
+function lightsOn(t) {
+  // floodlights switch on one by one with a flicker
+  return LIGHTS.map((_, i) => {
+    const s = 0.15 + i * 0.12;
+    if (t < s) return 0;
+    if (t < s + 0.25) return Math.sin((t - s) * 80) > 0 ? 1 : 0.2;
+    return 1;
+  });
+}
+
+function drawBackground(t, split) {
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // team colour split, diagonal; split = 0..1 strength
+  if (split > 0) {
+    ctx.save();
+    ctx.globalAlpha = split;
+    const sk = 140;
+    ctx.beginPath(); ctx.moveTo(CX + sk, 0); ctx.lineTo(W, 0); ctx.lineTo(W, H); ctx.lineTo(CX - sk, H); ctx.closePath();
+    let g = ctx.createLinearGradient(W, 0, CX, H);
+    g.addColorStop(0, "rgba(254,190,16,0.28)"); g.addColorStop(0.5, "rgba(0,82,159,0.25)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(CX + sk, 0); ctx.lineTo(0, 0); ctx.lineTo(0, H); ctx.lineTo(CX - sk, H); ctx.closePath();
+    g = ctx.createLinearGradient(0, 0, CX, H);
+    g.addColorStop(0, "rgba(165,0,68,0.38)"); g.addColorStop(0.5, "rgba(0,77,152,0.32)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g; ctx.fill();
+    // glowing seam
+    ctx.strokeStyle = "rgba(242,183,5,0.55)"; ctx.lineWidth = 4;
+    ctx.shadowColor = C.gold; ctx.shadowBlur = 25;
+    ctx.beginPath(); ctx.moveTo(CX + sk, 0); ctx.lineTo(CX - sk, H); ctx.stroke();
+    ctx.restore();
+  }
+
+  // pitch in perspective at the bottom
+  ctx.save();
+  const horizon = 640;
+  const pg = ctx.createLinearGradient(0, horizon, 0, H);
+  pg.addColorStop(0, "rgba(16,70,40,0)"); pg.addColorStop(1, "rgba(18,92,52,0.55)");
+  ctx.fillStyle = pg;
+  ctx.fillRect(0, horizon, W, H - horizon);
+  ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 2;
+  for (let i = -8; i <= 8; i++) {
+    ctx.beginPath(); ctx.moveTo(CX + i * 60, horizon); ctx.lineTo(CX + i * 420, H); ctx.stroke();
+  }
+  for (let j = 0; j < 6; j++) {
+    const y = horizon + Math.pow((j + ((t * 0.4) % 1)) / 6, 2) * (H - horizon);
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.ellipse(CX, 900, 360, 90, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+
+  // crowd: twinkling camera flashes
+  for (const c of crowd) {
+    const f = Math.pow(Math.max(0, Math.sin(t * 3 + c.p)), 30);
+    if (f < 0.05) continue;
+    ctx.fillStyle = `rgba(255,255,255,${f * 0.9})`;
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.s * (0.6 + f), 0, Math.PI * 2); ctx.fill();
+  }
+
+  // floodlight beams
+  const on = lightsOn(t);
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  LIGHTS.forEach(([x, y, ang], i) => {
+    if (!on[i]) return;
+    const sway = Math.sin(t * 0.7 + i) * 0.06;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-ang * 0.9 + sway);
+    const g = ctx.createLinearGradient(0, 0, 0, 1100);
+    g.addColorStop(0, `rgba(220,230,255,${0.22 * on[i]})`); g.addColorStop(1, "rgba(220,230,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(14, 0); ctx.lineTo(260, 1100); ctx.lineTo(-260, 1100); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    const hg = ctx.createRadialGradient(x, y, 0, x, y, 90);
+    hg.addColorStop(0, `rgba(255,255,255,${on[i]})`); hg.addColorStop(0.3, `rgba(200,220,255,${0.4 * on[i]})`); hg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = hg;
+    ctx.beginPath(); ctx.arc(x, y, 90, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.restore();
+
+  // rising golden embers
+  for (const e of embers) {
+    const y = (e.y - t * e.v + H * 2) % H;
+    ctx.fillStyle = `rgba(242,183,5,${0.25 + 0.25 * Math.sin(t * 2 + e.p)})`;
+    ctx.beginPath(); ctx.arc(e.x + Math.sin(t + e.p) * 10, y, e.s, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // vignette
+  const v = ctx.createRadialGradient(CX, CY, 400, CX, CY, 1200);
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,0.7)");
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+}
+
+// ---------- scene 1: title slam (0 - 3.2) ----------
+function scene1(t) {
+  if (t > 3.3) return;
+  const exit = eInCubic(prog(t, 2.75, 0.45));
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  ctx.translate(CX, CY); ctx.scale(1 + exit * 0.4, 1 + exit * 0.4); ctx.translate(-CX, -CY);
+
+  const kb = eOutCubic(prog(t, 0.6, 0.6));
+  if (kb > 0) football(CX, lerp(-150, 250, kb), 70, t * 6, 1);
+
+  const k = prog(t, 1.0, 0.35);
+  if (k > 0) {
+    const sc = lerp(2.8, 1, eOutCubic(k));
+    const shake = t > 1.35 && t < 1.7 ? Math.sin(t * 95) * 12 * (1 - prog(t, 1.35, 0.35)) : 0;
+    ctx.save();
+    ctx.translate(CX + shake, 520);
+    ctx.scale(sc, sc);
+    ctx.globalAlpha *= clamp(k * 3);
+    text(MATCH.title, 0, 0, { font: font(900, 210), size: 210, gradient: ["#FFF3C4", C.gold, "#B07A00"], glow: "rgba(242,183,5,0.6)", glowBlur: 50 });
+    ctx.restore();
+  }
+  shockwave(t, 1.35, C.gold, CX, 520, 900, 1.0, 12);
+  shockwave(t, 1.45, C.white, CX, 520, 1100, 1.1, 6);
+
+  const ks = eOutCubic(prog(t, 1.7, 0.7));
+  if (ks > 0) {
+    text("EL CLÁSICO", CX + 10, 690, { font: font(700, 46), color: C.white, alpha: ks, dir: "ltr", spacing: lerp(60, 24, ks) });
+    ctx.fillStyle = C.gold;
+    roundRect(CX - 330 - 140 * ks, 688, 140 * ks, 4, 2); ctx.fill();
+    roundRect(CX + 330, 688, 140 * ks, 4, 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// diagonal split transition: club colours sweep across
+function clubWipe(t, start) {
+  const k = eInOutCubic(prog(t, start, 0.7));
+  if (k <= 0 || k >= 1) return;
+  const bands = [[C.rmGold, 0], [C.white, 0.08], [C.fcbBlue, 0.16], [C.fcbRed, 0.24]];
+  for (const [col, d] of bands) {
+    const kk = eInOutCubic(prog(t, start + d, 0.55));
+    if (kk <= 0 || kk >= 1) continue;
+    const x = lerp(W + 400, -1200, kk);
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 700, 0); ctx.lineTo(x + 400, H); ctx.lineTo(x - 300, H); ctx.closePath(); ctx.fill();
+  }
+}
+
+// ---------- scene 2: crests face off (3.2 - 8.3) ----------
+function crestPose(t, key) {
+  // returns {x, y, h, rot, glow, alpha} for the crest across scenes 2-4
+  const tm = TEAMS[key];
+  const kin = eOutBack(prog(t, 3.35 + (key === "fcb" ? 0.12 : 0), 0.8));
+  const kUp = eInOutCubic(prog(t, 7.9, 0.7));       // move to header for the info scene
+  const kFin = eInOutCubic(prog(t, 12.4, 0.7));     // back down for the finale
+  let x = tm.x + tm.dir * (1 - kin) * 1100;
+  let y = 470;
+  let h = 420;
+  x = lerp(x, CX + tm.dir * 300, kUp); y = lerp(y, 175, kUp); h = lerp(h, 190, kUp);
+  x = lerp(x, CX + tm.dir * 560, kFin); y = lerp(y, 470, kFin); h = lerp(h, 300, kFin);
+  const rot = (1 - clamp(kin)) * 1.2 * tm.dir + Math.sin(t * 1.6 + tm.dir) * 0.03;
+  const glow = 0.4 + 0.3 * Math.sin(t * 3 + tm.dir);
+  return { x, y, h: h * (1 + Math.sin(t * 2.2 + tm.dir) * 0.015), rot, glow, alpha: clamp(kin * 2) };
+}
+
+function scene2(t) {
+  if (t < 3.2 || t > 8.4) return;
+  const kOut = eInCubic(prog(t, 7.8, 0.45));
+
+  const kh = eOutExpo(prog(t, 3.4, 0.7));
+  text("مواجهة القمة", CX, 120 + (1 - kh) * 40 - kOut * 60, { font: font(900, 64), color: C.gold, alpha: kh * (1 - kOut) });
+
+  // VS with lightning-like burst
+  const kv = prog(t, 4.25, 0.3);
+  if (kv > 0) {
+    const sc = lerp(3, 1, eOutCubic(kv)) * (1 - kOut);
+    ctx.save();
+    ctx.translate(CX, 470);
+    ctx.globalAlpha = clamp(kv * 3) * (1 - kOut);
+    ctx.save();
+    ctx.rotate(t * 0.6);
+    ctx.strokeStyle = "rgba(242,183,5,0.6)"; ctx.lineWidth = 3;
+    for (let i = 0; i < 12; i++) {
+      ctx.rotate(Math.PI / 6);
+      const l = 120 + 40 * Math.sin(t * 9 + i * 2);
+      ctx.beginPath(); ctx.moveTo(0, 110); ctx.lineTo(0, 110 + l * sc * 0.6); ctx.stroke();
+    }
+    ctx.restore();
+    ctx.scale(sc, sc);
+    ctx.shadowColor = C.gold; ctx.shadowBlur = 40;
+    ctx.fillStyle = "#0E1430";
+    ctx.beginPath(); ctx.arc(0, 0, 95, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = C.gold; ctx.lineWidth = 6; ctx.stroke();
+    ctx.shadowColor = "transparent";
+    text("VS", 0, 6, { font: font(900, 96), dir: "ltr", gradient: ["#FFF3C4", C.gold], size: 96 });
+    ctx.restore();
+  }
+  shockwave(t, 4.3, C.gold, CX, 470, 700, 0.9, 10);
+
+  for (const key of ["rm", "fcb"]) {
+    const tm = TEAMS[key];
+    const kn = eOutCubic(prog(t, 4.55 + (key === "fcb" ? 0.12 : 0), 0.5)) * (1 - kOut);
+    if (kn <= 0) continue;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(tm.x - 400, 700, 800, 140); ctx.clip();
+    text(tm.name, tm.x, 770 + (1 - kn) * 120, { font: font(900, 84), glow: hexA(tm.glow, 0.6) });
+    ctx.restore();
+  }
+}
+
+// ---------- scene 3: match info (8.2 - 12.6) ----------
+function icon(type, t, x, y, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 6; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (type === "date") {
+    roundRect(-38, -32, 76, 70, 10); ctx.stroke();
+    ctx.fillRect(-38, -32, 76, 18);
+    ctx.beginPath(); ctx.moveTo(-18, -44); ctx.lineTo(-18, -26); ctx.moveTo(18, -44); ctx.lineTo(18, -26); ctx.stroke();
+    text("25", 0, 14, { font: font(900, 30), color, dir: "ltr" });
+  } else if (type === "time") {
+    ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.stroke();
+    const a = t * 4;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a - Math.PI / 2) * 28, Math.sin(a - Math.PI / 2) * 28); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -18); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+  } else {
+    roundRect(-46, -30, 92, 60, 10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-20, 44); ctx.lineTo(20, 44); ctx.moveTo(0, 30); ctx.lineTo(0, 44); ctx.stroke();
+    // live dot pulsing on the screen
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 8);
+    ctx.fillStyle = "#FF3B4E";
+    ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function scene3(t) {
+  if (t < 8.2 || t > 12.8) return;
+  const kOut = eInCubic(prog(t, 12.2, 0.45));
+  const kv = eOutBack(prog(t, 8.5, 0.5)) * (1 - kOut);
+  if (kv > 0) {
+    ctx.save(); ctx.translate(CX, 175); ctx.scale(kv, kv);
+    text("VS", 0, 4, { font: font(900, 70), dir: "ltr", gradient: ["#FFF3C4", C.gold], size: 70 });
+    ctx.restore();
+  }
+
+  const cards = [
+    { type: "date", label: "الموعد", value: MATCH.date, dir: "rtl" },
+    { type: "time", label: "الساعة", value: MATCH.time, dir: "rtl" },
+    { type: "tv", label: "على قنوات", value: MATCH.channel, dir: "ltr" },
+  ];
+  const cw = 500, ch = 380, gap = 50, cy = 640;
+  cards.forEach((cd, i) => {
+    const x = CX + (cw + gap) * (1 - i); // RTL: first card on the right
+    const kin = eOutBack(prog(t, 8.7 + i * 0.22, 0.7));
+    const ko = eInCubic(prog(t, 12.2 + i * 0.06, 0.4));
+    if (kin <= 0 || ko >= 1) return;
+    ctx.save();
+    ctx.translate(x, cy + (1 - kin) * 220 + ko * 200);
+    ctx.globalAlpha = clamp(kin * 1.5) * (1 - ko);
+    ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20;
+    ctx.fillStyle = C.card;
+    roundRect(-cw / 2, -ch / 2, cw, ch, 34); ctx.fill();
+    ctx.shadowColor = "transparent";
+    // gold border drawn progressively
+    const kb = eOutCubic(prog(t, 9.0 + i * 0.22, 0.8));
+    ctx.save(); roundRect(-cw / 2, -ch / 2, cw, ch, 34); ctx.clip();
+    const g = ctx.createLinearGradient(-cw / 2, 0, cw / 2, 0);
+    g.addColorStop(0, C.fcbRed); g.addColorStop(0.5, C.gold); g.addColorStop(1, C.rmBlue);
+    ctx.fillStyle = g; ctx.fillRect(cw / 2 - cw * kb, -ch / 2, cw * kb, 10);
+    ctx.restore();
+    ctx.strokeStyle = "rgba(242,183,5,0.35)"; ctx.lineWidth = 2;
+    roundRect(-cw / 2, -ch / 2, cw, ch, 34); ctx.stroke();
+
+    const ki = eOutBack(prog(t, 9.0 + i * 0.22, 0.5));
+    ctx.save(); ctx.translate(0, -ch / 2 + 100); ctx.scale(ki, ki);
+    ctx.fillStyle = "rgba(242,183,5,0.12)";
+    ctx.beginPath(); ctx.arc(0, 0, 70, 0, Math.PI * 2); ctx.fill();
+    icon(cd.type, t, 0, 0, C.gold);
+    ctx.restore();
+
+    text(cd.label, 0, 40, { font: font(700, 34), color: C.muted });
+    const kt = eOutExpo(prog(t, 9.25 + i * 0.22, 0.7));
+    ctx.save();
+    ctx.beginPath(); ctx.rect(-cw / 2, 70, cw, 110); ctx.clip();
+    text(cd.value, 0, 120 + (1 - kt) * 100, { font: font(900, cd.type === "tv" ? 54 : 56), dir: cd.dir });
+    ctx.restore();
+    ctx.restore();
+  });
+}
+
+// ---------- scene 4: finale (12.5 - 15) ----------
+function scene4(t) {
+  if (t < 12.5) return;
+  // ball drops in and bounces on the centre line
+  const kd = prog(t, 12.6, 1.0);
+  if (kd > 0) {
+    const bounce = Math.abs(Math.cos(kd * Math.PI * 2.5)) * Math.pow(1 - kd, 1.5);
+    const y = 470 - bounce * 420 - (kd < 0.2 ? (0.2 - kd) * 2000 : 0);
+    football(CX, y, 85, t * 4, 1);
+  }
+  shockwave(t, 12.85, C.white, CX, 550, 400, 0.6, 6);
+
+  const kt = eOutExpo(prog(t, 13.0, 0.8));
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 610, W, 170); ctx.clip();
+  text("لا تفوّتوا المباراة!", CX, 690 + (1 - kt) * 170, { font: font(900, 110), size: 110, gradient: ["#FFF3C4", C.gold, "#B07A00"], glow: "rgba(242,183,5,0.5)" });
+  ctx.restore();
+
+  const ks = eOutCubic(prog(t, 13.5, 0.6));
+  if (ks > 0) {
+    ctx.save();
+    ctx.globalAlpha = ks;
+    ctx.translate(CX, 850 + (1 - ks) * 30);
+    ctx.fillStyle = "rgba(255,59,78,0.95)";
+    roundRect(-430, -42, 860, 84, 42); ctx.fill();
+    ctx.fillStyle = C.white;
+    ctx.globalAlpha *= 0.6 + 0.4 * Math.sin(t * 8);
+    ctx.beginPath(); ctx.arc(385, 0, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = ks;
+    // RLM keeps the bullet and time in the Arabic run instead of joining the Latin channel name
+    text(`مباشر على ${MATCH.channel}\u200F  •  ${MATCH.time}`, -10, 3, { font: font(900, 40) });
+    ctx.restore();
+  }
+}
+
+function drawCrests(t) {
+  if (t < 3.3) return;
+  for (const key of ["rm", "fcb"]) {
+    const p = crestPose(t, key);
+    crest(key, p.x, p.y, p.h, p.alpha, p.rot, p.glow);
+  }
+}
+
+// ---------- master ----------
+function render(t) {
+  ctx.save();
+  const split = eOutCubic(prog(t, 3.2, 0.6));
+  drawBackground(t, split);
+  scene1(t);
+  scene2(t);
+  scene3(t);
+  scene4(t);
+  drawCrests(t);
+  flash(t, 1.0, 0.3, 0.7);
+  flash(t, 4.25, 0.25, 0.5);
+  clubWipe(t, 2.75);
+  const fadeIn = 1 - prog(t, 0, 0.3);
+  const fadeOut = prog(t, DURATION - 0.6, 0.6);
+  const f = Math.max(fadeIn, fadeOut);
+  if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
+const loadImg = tm => new Promise((res, rej) => { const im = new Image(); im.onload = () => { tm.img = im; res(); }; im.onerror = rej; im.src = tm.src; });
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = Promise.all([
+  ...Object.values(TEAMS).map(loadImg),
+  ...[400, 700, 900].flatMap(w => [document.fonts.load(`${w} 50px Cairo`, "الكلاسيكو"), document.fonts.load(`${w} 50px Cairo`, "ABC")]),
+]).then(() => true);
+
+if (!navigator.webdriver) {
+  const t0 = performance.now();
+  window.ready.then(() => {
+    const loop = now => { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>
