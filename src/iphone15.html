@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>آيفون 15</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2212, U+00D7; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2212, U+00D7; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2212, U+00D7; }
+  html, body { margin: 0; background: #07070D; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 22;
+// scene windows (seconds); the soundtrack script uses the same cue times
+const S = { title: [0, 3.9], island: [3.6, 7.7], camera: [7.4, 11.7], chip: [11.4, 14.9], usbc: [14.6, 17.9], colors: [17.6, 22] };
+const C = { ink: "#07070D", white: "#F5F5F7", muted: "#9A9AA8", blue: "#6EA8FF", cyan: "#5EE0F2", green: "#7BE0A0", pink: "#F6B8D0", yellow: "#F4E6A0", orange: "#FFB066" };
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOut = k => 1 - Math.pow(1 - k, 3);
+const eInOut = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const font = (w, s) => `${w} ${s}px Cairo`;
+const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); };
+
+function text(str, x, y, o = {}) {
+  ctx.save();
+  ctx.direction = o.dir || "rtl";
+  ctx.font = o.font || font(700, 60);
+  ctx.textAlign = o.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.globalAlpha *= o.alpha ?? 1;
+  if (o.shadow) { ctx.shadowColor = o.shadow; ctx.shadowBlur = o.blur ?? 40; }
+  if (o.grad) {
+    const m = ctx.measureText(str).width;
+    const g = ctx.createLinearGradient(x - m / 2, 0, x + m / 2, 0);
+    o.grad.forEach((c, i) => g.addColorStop(i / (o.grad.length - 1), c));
+    ctx.fillStyle = g;
+  } else ctx.fillStyle = o.color || C.white;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// a scene is visible in [a, b]; it fades/slides in over 0.45 s and out over 0.45 s
+function scene(t, [a, b], fn) {
+  if (t < a || t > b) return;
+  const inK = eOut(prog(t, a, 0.5)), outK = prog(t, b - 0.45, 0.45);
+  ctx.save();
+  ctx.globalAlpha = Math.min(inK, 1 - outK);
+  ctx.translate(0, (1 - inK) * 30 - outK * 20);
+  fn(t - a, t);
+  ctx.restore();
+}
+
+// ---------- background ----------
+const THEMES = [[0, "#0B1030", "#2A1B5E"], [3.6, "#05161F", "#0B4A5C"], [7.4, "#14090B", "#5C1F2B"], [11.4, "#0A1224", "#1B3A8A"], [14.6, "#0A1B16", "#14604A"], [17.6, "#12081E", "#4A1F6B"]];
+function mixHex(a, b, k) {
+  const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const x = p(a), y = p(b);
+  return `rgb(${x.map((v, i) => Math.round(lerp(v, y[i], k))).join(",")})`;
+}
+function background(t) {
+  let i = THEMES.length - 1; while (i > 0 && t < THEMES[i][0]) i--;
+  const cur = THEMES[i], prev = THEMES[Math.max(0, i - 1)], k = i === 0 ? 1 : eInOut(prog(t, cur[0], 0.8));
+  const top = mixHex(prev[1], cur[1], k), bot = mixHex(prev[2], cur[2], k);
+  const g = ctx.createLinearGradient(0, 0, W * 0.4, H);
+  g.addColorStop(0, top); g.addColorStop(1, bot);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (let n = 0; n < 4; n++) {
+    const x = CX + Math.sin(t * 0.35 + n * 1.7) * 700, y = CY + Math.cos(t * 0.3 + n * 2.3) * 350;
+    const r = ctx.createRadialGradient(x, y, 0, x, y, 520);
+    r.addColorStop(0, "rgba(255,255,255,0.07)"); r.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = r; ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// ---------- phone drawing ----------
+// front view: body, screen, Dynamic Island. `tint` colours the frame, `wall` is the wallpaper gradient.
+function phoneFront(x, y, s, o = {}) {
+  const w = 300 * s, h = 620 * s, tint = o.tint || "#2A2D3A", wall = o.wall || ["#5B7CFF", "#C14BFF"];
+  ctx.save(); ctx.translate(x, y);
+  ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = 60 * s; ctx.shadowOffsetY = 24 * s;
+  ctx.fillStyle = tint; rr(-w / 2, -h / 2, w, h, 56 * s); ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.strokeStyle = "rgba(255,255,255,0.22)"; ctx.lineWidth = 3 * s; rr(-w / 2, -h / 2, w, h, 56 * s); ctx.stroke();
+  const sw = w - 22 * s, sh = h - 22 * s;
+  const g = ctx.createLinearGradient(-sw / 2, -sh / 2, sw / 2, sh / 2);
+  g.addColorStop(0, wall[0]); g.addColorStop(1, wall[1]);
+  ctx.fillStyle = g; rr(-sw / 2, -sh / 2, sw, sh, 46 * s); ctx.fill();
+  // lock-screen clock
+  ctx.fillStyle = "rgba(255,255,255,0.92)"; ctx.font = `700 ${86 * s}px Cairo`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.direction = "ltr";
+  ctx.fillText("9:41", 0, -sh / 2 + 150 * s);
+  // island
+  ctx.fillStyle = "#000"; rr(-48 * s, -sh / 2 + 16 * s, 96 * s, 28 * s, 14 * s); ctx.fill();
+  ctx.restore();
+}
+function lens(x, y, r, glow = 0) {
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+  g.addColorStop(0, "#3C4A7A"); g.addColorStop(0.45, "#10142A"); g.addColorStop(1, "#000");
+  ctx.save();
+  ctx.shadowColor = `rgba(94,224,242,${0.8 * glow})`; ctx.shadowBlur = 50 * glow;
+  ctx.fillStyle = "#2B2E3B"; ctx.beginPath(); ctx.arc(x, y, r * 1.18, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.beginPath(); ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.18, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- scene 1: title ----------
+function sceneTitle(l) {
+  const k = eOut(prog(l, 0.2, 1.1));
+  phoneFront(CX - 520, CY + 160 * (1 - k) + 10, 1.5, { tint: "#E8B4CC", wall: ["#FFB3D1", "#7C5CFF"] });
+  text("iPhone", CX + 330, 360, { font: font(700, 70), color: C.muted, dir: "ltr", alpha: prog(l, 0.5, 0.6) });
+  text("آيفون 15", CX + 330, 520, { font: font(900, 190), grad: ["#FFB3D1", "#FFFFFF", "#9EC2FF"], shadow: "rgba(158,194,255,0.55)", blur: 60, alpha: prog(l, 0.7, 0.7) });
+  text("تصميم جديد · أداء أسرع · كاميرا أدق", CX + 330, 690, { font: font(700, 48), color: C.white, alpha: prog(l, 1.3, 0.6) });
+}
+
+// ---------- scene 2: Dynamic Island ----------
+function sceneIsland(l) {
+  const states = [
+    { w: 230, h: 76, label: "" },
+    { w: 640, h: 150, label: "call" },
+    { w: 640, h: 150, label: "music" },
+  ];
+  const seg = l < 1.2 ? [0, 0, 0] : l < 2.5 ? [0, 1, prog(l, 1.2, 0.5)] : [1, 2, prog(l, 2.5, 0.5)];
+  const a = states[seg[0]], b = states[seg[1]], k = eBack(seg[2]);
+  const w = lerp(a.w, b.w, k), h = lerp(a.h, b.h, k), y = 320, X = CX + 330;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 40;
+  ctx.fillStyle = "#000"; rr(X - w / 2, y - h / 2, w, h, h / 2); ctx.fill();
+  ctx.shadowColor = "transparent";
+  const state = seg[1] === 0 ? "" : seg[2] > 0.4 ? b.label : a.label;
+  if (state === "call") {
+    ctx.fillStyle = C.green; ctx.beginPath(); ctx.arc(X + w / 2 - 70, y, 34, 0, Math.PI * 2); ctx.fill();
+    text("مكالمة · 00:12", X - 20, y, { font: font(700, 40), color: C.white });
+  } else if (state === "music") {
+    for (let i = 0; i < 9; i++) {
+      const bh = 20 + 46 * Math.abs(Math.sin(l * 6 + i * 0.9));
+      ctx.fillStyle = C.pink; rr(X + w / 2 - 70 - i * 22, y - bh / 2, 10, bh, 5); ctx.fill();
+    }
+    text("تشغيل الموسيقى", X - 80, y, { font: font(700, 40), color: C.white });
+  }
+  ctx.restore();
+  phoneFront(CX - 450, CY + 10, 1.5, { tint: "#4A5568", wall: ["#16324F", "#0B6E8A"] });
+  text("ديناميك آيلاند", X, 560, { font: font(900, 110), grad: ["#5EE0F2", "#FFFFFF"], alpha: prog(l, 0.2, 0.6), shadow: "rgba(94,224,242,0.5)" });
+  text("تنبيهات حيّة في جزيرة واحدة", X, 690, { font: font(700, 46), color: C.white, alpha: prog(l, 0.5, 0.6) });
+}
+
+// ---------- scene 3: camera ----------
+function sceneCamera(l) {
+  const k = eOut(prog(l, 0.1, 0.9));
+  ctx.save(); ctx.translate(CX - 450, CY + 10); ctx.scale(lerp(0.85, 1, k), lerp(0.85, 1, k));
+  // back glass
+  ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24;
+  const g = ctx.createLinearGradient(-180, -380, 180, 380); g.addColorStop(0, "#F7C3D6"); g.addColorStop(1, "#D98FB0");
+  ctx.fillStyle = g; rr(-180, -380, 360, 760, 62); ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.fillStyle = "rgba(255,255,255,0.18)"; rr(-180, -380, 360, 760, 62); ctx.fill();
+  // camera plate
+  ctx.fillStyle = "rgba(255,255,255,0.28)"; rr(-150, -350, 190, 190, 40); ctx.fill();
+  const glow = 0.5 + 0.5 * Math.sin(l * 4);
+  lens(-100, -300, 36, glow); lens(-10, -210, 36, 0); // main + ultra wide
+  ctx.fillStyle = "#FFF3B0"; ctx.beginPath(); ctx.arc(0, -300, 11, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // focus brackets
+  const f = prog(l, 1.0, 0.5);
+  ctx.save(); ctx.globalAlpha *= f; ctx.strokeStyle = C.yellow; ctx.lineWidth = 6;
+  const bx = CX - 550, by = CY - 280, bs = 190 + (1 - eOut(f)) * 80;
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+    ctx.beginPath(); ctx.moveTo(bx + sx * bs / 2, by + sy * (bs / 2 - 36)); ctx.lineTo(bx + sx * bs / 2, by + sy * bs / 2); ctx.lineTo(bx + sx * (bs / 2 - 36), by + sy * bs / 2); ctx.stroke();
+  });
+  ctx.restore();
+  const n = Math.round(48 * eOut(prog(l, 0.6, 1.8)));
+  text(String(n), CX + 340, 450, { font: font(900, 300), grad: ["#FFD27A", "#FF7AA8"], dir: "ltr", shadow: "rgba(255,122,168,0.55)", blur: 60 });
+  text("ميجابكسل", CX + 340, 640, { font: font(900, 96), color: C.white, alpha: prog(l, 1.0, 0.5) });
+  text("كاميرا رئيسية بدقة أعلى وتفاصيل أوضح", CX + 340, 750, { font: font(700, 44), color: C.muted, alpha: prog(l, 1.6, 0.5) });
+}
+
+// ---------- scene 4: chip ----------
+function sceneChip(l) {
+  const cx = CX - 430, cy = CY;
+  // traces
+  ctx.save(); ctx.strokeStyle = "rgba(110,168,255,0.55)"; ctx.lineWidth = 4;
+  for (let i = -5; i <= 5; i++) {
+    const a = prog(l, 0.2 + Math.abs(i) * 0.05, 0.8), off = i * 36;
+    ctx.beginPath(); ctx.moveTo(cx + off, cy - 150 - 330 * a); ctx.lineTo(cx + off, cy - 150); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + off, cy + 150 + 330 * a); ctx.lineTo(cx + off, cy + 150); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 150 - 330 * a, cy + off); ctx.lineTo(cx - 150, cy + off); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 150 + 330 * a, cy + off); ctx.lineTo(cx + 150, cy + off); ctx.stroke();
+  }
+  ctx.restore();
+  const pulse = 0.5 + 0.5 * Math.sin(l * 5);
+  ctx.save(); ctx.shadowColor = `rgba(110,168,255,${0.5 + 0.4 * pulse})`; ctx.shadowBlur = 70;
+  const g = ctx.createLinearGradient(cx - 150, cy - 150, cx + 150, cy + 150); g.addColorStop(0, "#2B3F8F"); g.addColorStop(1, "#0F1B4D");
+  ctx.fillStyle = g; rr(cx - 150, cy - 150, 300, 300, 36); ctx.fill(); ctx.restore();
+  ctx.strokeStyle = C.blue; ctx.lineWidth = 4; rr(cx - 150, cy - 150, 300, 300, 36); ctx.stroke();
+  text("A16", cx, cy - 30, { font: font(900, 120), color: C.white, dir: "ltr" });
+  text("BIONIC", cx, cy + 70, { font: font(700, 52), color: C.blue, dir: "ltr", spacing: 6 });
+  text("الشريحة", CX + 330, 400, { font: font(700, 60), color: C.muted, alpha: prog(l, 0.4, 0.5) });
+  text("A16 Bionic", CX + 330, 520, { font: font(900, 140), grad: ["#6EA8FF", "#FFFFFF"], dir: "ltr", shadow: "rgba(110,168,255,0.5)", alpha: prog(l, 0.6, 0.6) });
+  text("أداء أسرع وكفاءة أعلى في استهلاك الطاقة", CX + 330, 650, { font: font(700, 44), color: C.white, alpha: prog(l, 1.1, 0.6) });
+}
+
+// ---------- scene 5: USB-C ----------
+function sceneUsbc(l) {
+  const cx = CX - 430, cy = CY;
+  // phone bottom edge
+  ctx.save();
+  ctx.fillStyle = "#3A3E4D"; rr(cx - 260, cy - 120, 520, 240, 40); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 3; rr(cx - 260, cy - 120, 520, 240, 40); ctx.stroke();
+  // port
+  ctx.fillStyle = "#050507"; rr(cx - 70, cy + 82, 140, 36, 18); ctx.fill();
+  ctx.fillStyle = "#333"; rr(cx - 50, cy + 93, 100, 14, 7); ctx.fill();
+  // speaker holes
+  ctx.fillStyle = "#14151C";
+  for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.arc(cx - 200 + i * 22, cy + 100, 6, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(cx + 90 + i * 22, cy + 100, 6, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+  // cable sliding in from below
+  const k = eOut(prog(l, 0.4, 1.0)), y = lerp(cy + 560, cy + 106, k);
+  ctx.save();
+  ctx.fillStyle = "#D8DAE2"; rr(cx - 58, y - 14, 116, 28, 14); ctx.fill();
+  ctx.fillStyle = "#1A1B22"; rr(cx - 56, y + 12, 112, 400, 20); ctx.fill();
+  ctx.restore();
+  // charge glow
+  const p = prog(l, 1.4, 0.4);
+  if (p > 0) {
+    ctx.save(); ctx.globalAlpha *= p * (0.6 + 0.4 * Math.sin(l * 6));
+    ctx.shadowColor = C.green; ctx.shadowBlur = 50; ctx.strokeStyle = C.green; ctx.lineWidth = 6;
+    rr(cx - 260, cy - 120, 520, 240, 40); ctx.stroke(); ctx.restore();
+  }
+  text("USB-C", CX + 330, 450, { font: font(900, 190), grad: ["#7BE0A0", "#FFFFFF"], dir: "ltr", shadow: "rgba(123,224,160,0.5)", alpha: prog(l, 0.3, 0.6) });
+  text("منفذ واحد للشحن ونقل البيانات", CX + 330, 600, { font: font(700, 50), color: C.white, alpha: prog(l, 0.9, 0.6) });
+}
+
+// ---------- scene 6: colors + outro ----------
+const COLORS = [
+  { name: "وردي", tint: "#F4B6CF", wall: ["#FFB3D1", "#7C5CFF"] },
+  { name: "أصفر", tint: "#F2E3A0", wall: ["#FFD27A", "#FF8A5C"] },
+  { name: "أخضر", tint: "#B9D6B5", wall: ["#7BE0A0", "#2B8A8A"] },
+  { name: "أزرق", tint: "#A9C3DC", wall: ["#6EA8FF", "#3A3FC4"] },
+  { name: "أسود", tint: "#2A2A2E", wall: ["#4A4A60", "#14141F"] },
+];
+function sceneColors(l) {
+  COLORS.forEach((c, i) => {
+    const k = eBack(prog(l, 0.2 + i * 0.18, 0.8)), x = CX + (i - 2) * 330, y = CY - 150 + Math.abs(i - 2) * 22 + Math.sin(l * 1.8 + i) * 8;
+    ctx.save(); ctx.globalAlpha *= clamp(k);
+    ctx.translate(x, y + (1 - clamp(k)) * 160);
+    ctx.rotate((i - 2) * 0.06);
+    phoneFront(0, 0, 0.82, { tint: c.tint, wall: c.wall });
+    ctx.restore();
+    text(c.name, x, y + 315, { font: font(700, 38), color: C.white, alpha: prog(l, 0.9 + i * 0.1, 0.4) });
+  });
+  const f = prog(l, 2.2, 0.8);
+  text("آيفون 15", CX, 870, { font: font(900, 110), grad: ["#FFB3D1", "#FFFFFF", "#9EC2FF"], alpha: f, shadow: "rgba(158,194,255,0.5)" });
+  text("خمسة ألوان · تجربة جديدة", CX, 980, { font: font(700, 44), color: C.muted, alpha: f });
+}
+
+// ---------- frame ----------
+function render(t) {
+  ctx.save();
+  background(t);
+  scene(t, S.title, sceneTitle);
+  scene(t, S.island, sceneIsland);
+  scene(t, S.camera, sceneCamera);
+  scene(t, S.chip, sceneChip);
+  scene(t, S.usbc, sceneUsbc);
+  scene(t, S.colors, sceneColors);
+  const f = Math.max(1 - prog(t, 0, 0.4), prog(t, DURATION - 1.0, 1.0));
+  if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = Promise.all([400, 700, 900].flatMap(w => [
+  document.fonts.load(`${w} 50px Cairo`, "آيفون ديناميك ميجابكسل"),
+  document.fonts.load(`${w} 50px Cairo`, "iPhone A16 USB-C 9:41"),
+])).then(() => true);
+
+if (!navigator.webdriver) {
+  const t0 = performance.now();
+  window.ready.then(() => {
+    const loop = now => { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>
