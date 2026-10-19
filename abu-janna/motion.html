@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Abu Janna FOR YOU</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #02040c; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// 25 s, 1920x1080. Scenes (the can image is the only product art, kept unmodified):
+//  0 –  5 dark intro, sparks, can drops onto a glossy platform with a flash
+//  5 – 11 numbers 1..10 race around the can, huge "10" + Tahoe silhouette
+// 11 – 17 macro can, glowing gold "جنة", iPhone 17 spinning
+// 17 – 22 "أبو جنة" slams in with a gold burst, Tahoe behind, can in front
+// 22 – 25 hero can with energy lines and the three campaign lines
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 25;
+const C = { ink: "#02040C", navy: "#06122E", blue: "#1E6BFF", sky: "#7CC4FF", white: "#F4F8FF", gold: "#F5C451", goldDeep: "#B8862B" };
+const ctx = document.getElementById("c").getContext("2d");
+
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eOutBack = (k, s = 1.70158) => 1 + (s + 1) * Math.pow(k - 1, 3) + s * Math.pow(k - 1, 2);
+const eOutBounce = k => { const n = 7.5625, d = 2.75; if (k < 1 / d) return n * k * k; if (k < 2 / d) return n * (k -= 1.5 / d) * k + 0.75; if (k < 2.5 / d) return n * (k -= 2.25 / d) * k + 0.9375; return n * (k -= 2.625 / d) * k + 0.984375; };
+const font = (w, s) => `${w} ${s}px Cairo`;
+const win = (t, a, b, fin = 0.3, fout = 0.3) => Math.min(prog(t, a, fin), 1 - prog(t, b - fout, fout));
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+const IMG = {};
+const ready = (async () => {
+  await new Promise((res, rej) => { const im = new Image(); im.onload = () => { IMG.can = im; res(); }; im.onerror = rej; im.src = "assets/can.png"; });
+  await Promise.all([700, 900].map(w => document.fonts.load(font(w, 40), "أبو جنة 10 iPhone")));
+  render(0);
+})();
+
+// ---------- helpers ----------
+function text(str, x, y, o = {}) {
+  ctx.save();
+  ctx.direction = o.dir || "rtl";
+  ctx.font = o.font || font(900, 80);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.globalAlpha *= o.alpha ?? 1;
+  if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = o.glowBlur ?? 30; }
+  if (o.stroke) { ctx.lineWidth = o.strokeW || 8; ctx.strokeStyle = o.stroke; ctx.lineJoin = "round"; ctx.strokeText(str, x, y); }
+  ctx.fillStyle = o.fill || C.white;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+function goldGrad(y, h) {
+  const g = ctx.createLinearGradient(0, y - h / 2, 0, y + h / 2);
+  g.addColorStop(0, "#FFF3C4"); g.addColorStop(0.45, C.gold); g.addColorStop(0.55, "#DBA43C"); g.addColorStop(1, "#8F6420");
+  return g;
+}
+// can height h, centred at x,y; yaw fakes a turn by squeezing the width
+function drawCan(x, y, h, o = {}) {
+  const im = IMG.can, w = h * im.width / im.height;
+  const yaw = o.yaw ?? 0, sx = 1 - 0.1 * Math.abs(Math.sin(yaw));
+  ctx.save();
+  ctx.globalAlpha *= o.alpha ?? 1;
+  ctx.translate(x, y); if (o.rot) ctx.rotate(o.rot);
+  ctx.scale(sx * (o.sx ?? 1), o.sy ?? 1);
+  if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = o.glowBlur ?? 60; }
+  ctx.drawImage(im, -w / 2, -h / 2, w, h);
+  ctx.shadowBlur = 0;
+  // moving specular band over the can body
+  ctx.globalCompositeOperation = "source-atop";
+  const k = ((o.shine ?? 0) % 1);
+  if (o.shine !== undefined) {
+    const g = ctx.createLinearGradient(-w / 2 + k * w * 1.6 - w * 0.3, 0, -w / 2 + k * w * 1.6 + w * 0.1, 0);
+    g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,0.45)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g; ctx.fillRect(-w / 2, -h / 2, w, h);
+  }
+  ctx.restore();
+}
+function bgGlow(cx, cy, r, c1, c2) {
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g.addColorStop(0, c1); g.addColorStop(1, c2 || "rgba(0,0,0,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+function fillBg(top, bot) {
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, top); g.addColorStop(1, bot);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+function flash(a, rgb = "255,255,255") { if (a <= 0.003) return; ctx.fillStyle = `rgba(${rgb},${clamp(a)})`; ctx.fillRect(0, 0, W, H); }
+function vignette(a) { const g = ctx.createRadialGradient(CX, CY, H * 0.35, CX, CY, H * 1.0); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, `rgba(0,0,0,${a})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+function grain(t) { const r = rng(Math.floor(t * 30) + 7); ctx.save(); ctx.globalAlpha = 0.05; ctx.fillStyle = "#fff"; for (let i = 0; i < 160; i++) ctx.fillRect(r() * W, r() * H, 2, 2); ctx.restore(); }
+
+// sparks: deterministic particles bursting from a point
+function sparks(t, t0, x, y, n, speed, colors, life = 1.4, seed = 3) {
+  const age = t - t0; if (age < 0 || age > life) return;
+  const r = rng(seed); ctx.save();
+  for (let i = 0; i < n; i++) {
+    const a = r() * Math.PI * 2, v = speed * (0.3 + r() * 0.9), l = life * (0.5 + r() * 0.5);
+    if (age > l) { r(); continue; }
+    const d = v * (1 - Math.pow(1 - age / l, 2)) * l * 0.6;
+    const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d + 120 * age * age;
+    ctx.globalAlpha = 1 - age / l; ctx.fillStyle = colors[Math.floor(r() * colors.length)];
+    ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(px, py, 1.5 + r() * 3.5, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+// ambient floating embers
+const dust = (() => { const r = rng(21), o = []; for (let i = 0; i < 90; i++) o.push({ x: r() * W, y: r() * H, s: 1 + r() * 2.6, v: 15 + r() * 50, p: r() * 6.28 }); return o; })();
+function drawDust(t, color, alpha = 1) {
+  ctx.save(); ctx.fillStyle = color;
+  for (const d of dust) { const y = ((d.y - d.v * t) % H + H) % H; ctx.globalAlpha = alpha * (0.3 + 0.7 * Math.abs(Math.sin(t * 2 + d.p))); ctx.beginPath(); ctx.arc(d.x + Math.sin(t + d.p) * 22, y, d.s, 0, 7); ctx.fill(); }
+  ctx.restore();
+}
+// electric arcs between two points
+function lightning(t, x1, y1, x2, y2, color, seedBase, w = 3) {
+  const r = rng(Math.floor(t * 14) * 97 + seedBase); const n = 9;
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.shadowColor = color; ctx.shadowBlur = 20; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(x1, y1);
+  for (let i = 1; i < n; i++) { const k = i / n; ctx.lineTo(lerp(x1, x2, k) + (r() - 0.5) * 70, lerp(y1, y2, k) + (r() - 0.5) * 70); }
+  ctx.lineTo(x2, y2); ctx.stroke(); ctx.restore();
+}
+// glossy platform under the product with reflection
+function platform(cx, y, w, glow) {
+  ctx.save();
+  const g = ctx.createLinearGradient(0, y, 0, y + 170); g.addColorStop(0, "#14203F"); g.addColorStop(1, "#04060F");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, y + 30, w, 62, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = glow; ctx.lineWidth = 4; ctx.shadowColor = glow; ctx.shadowBlur = 30;
+  ctx.beginPath(); ctx.ellipse(cx, y + 30, w, 62, 0, 0, 7); ctx.stroke();
+  ctx.restore();
+}
+function reflection(x, y, h, o = {}) {
+  ctx.save(); ctx.translate(0, y * 2); ctx.scale(1, -1);
+  ctx.globalAlpha = 0.18 * (o.alpha ?? 1); drawCan(x, y, h, { yaw: o.yaw });
+  ctx.restore();
+  const g = ctx.createLinearGradient(0, y + h / 2, 0, y + h / 2 + h * 0.5);
+  g.addColorStop(0, "rgba(2,4,12,0)"); g.addColorStop(1, "rgba(2,4,12,1)");
+}
+
+// ---------- vehicle & phone (generic, unbranded silhouettes) ----------
+function drawSUV(cx, cy, s, t, o = {}) {
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(s, s); ctx.globalAlpha *= o.alpha ?? 1;
+  const body = ctx.createLinearGradient(0, -140, 0, 70);
+  body.addColorStop(0, "#2A3350"); body.addColorStop(0.5, "#0C1226"); body.addColorStop(1, "#02040C");
+  ctx.shadowColor = o.glow || C.gold; ctx.shadowBlur = 40;
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-430, 30); ctx.lineTo(-430, -20); ctx.quadraticCurveTo(-425, -60, -380, -68);
+  ctx.lineTo(-290, -90); ctx.lineTo(-250, -185); ctx.quadraticCurveTo(-240, -200, -215, -200);
+  ctx.lineTo(215, -200); ctx.quadraticCurveTo(250, -198, 262, -170); ctx.lineTo(330, -80);
+  ctx.lineTo(395, -62); ctx.quadraticCurveTo(440, -50, 440, -5); ctx.lineTo(440, 30);
+  ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0;
+  // roofline highlight
+  ctx.strokeStyle = "rgba(245,196,81,0.85)"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-290, -90); ctx.lineTo(-250, -185); ctx.quadraticCurveTo(-240, -200, -215, -200); ctx.lineTo(215, -200); ctx.quadraticCurveTo(250, -198, 262, -170); ctx.lineTo(330, -80); ctx.stroke();
+  // windows
+  ctx.fillStyle = "rgba(120,180,255,0.35)";
+  ctx.beginPath(); ctx.moveTo(-262, -92); ctx.lineTo(-228, -178); ctx.lineTo(-20, -178); ctx.lineTo(-20, -92); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0, -178); ctx.lineTo(205, -178); ctx.lineTo(300, -92); ctx.lineTo(0, -92); ctx.closePath(); ctx.fill();
+  // headlights + tail
+  const pulse = 0.65 + 0.35 * Math.sin(t * 8);
+  ctx.fillStyle = `rgba(255,244,200,${pulse})`; ctx.shadowColor = "#FFF3C4"; ctx.shadowBlur = 40;
+  ctx.fillRect(385, -40, 48, 14);
+  ctx.fillStyle = "#FF3B30"; ctx.shadowColor = "#FF3B30"; ctx.fillRect(-430, -30, 16, 12);
+  ctx.shadowBlur = 0;
+  // wheels
+  for (const wx of [-270, 270]) {
+    ctx.fillStyle = "#05070E"; ctx.beginPath(); ctx.arc(wx, 32, 66, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#C8D2EA"; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(wx, 32, 40, 0, 7); ctx.stroke();
+    ctx.save(); ctx.translate(wx, 32); ctx.rotate(t * 6);
+    ctx.strokeStyle = "#8FA0C8"; ctx.lineWidth = 4;
+    for (let i = 0; i < 5; i++) { ctx.rotate(Math.PI * 2 / 5); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(36, 0); ctx.stroke(); }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function drawPhone(cx, cy, s, spin, t, o = {}) {
+  const k = Math.cos(spin), back = k < 0, w = 330 * Math.abs(k) + 6, h = 690;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(s, s); ctx.globalAlpha *= o.alpha ?? 1;
+  ctx.shadowColor = C.sky; ctx.shadowBlur = 70;
+  const edge = ctx.createLinearGradient(-w / 2, 0, w / 2, 0); edge.addColorStop(0, "#9AA4BC"); edge.addColorStop(0.5, "#E8EDF8"); edge.addColorStop(1, "#7E889F");
+  ctx.fillStyle = edge; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 56 * Math.abs(k) + 8); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.save(); ctx.beginPath(); ctx.roundRect(-w / 2 + 10 * Math.abs(k), -h / 2 + 10, w - 20 * Math.abs(k), h - 20, 46 * Math.abs(k) + 6); ctx.clip();
+  if (!back) {
+    const sc = ctx.createLinearGradient(0, -h / 2, 0, h / 2); sc.addColorStop(0, "#0B2A7A"); sc.addColorStop(0.55, "#1E6BFF"); sc.addColorStop(1, "#06122E");
+    ctx.fillStyle = sc; ctx.fillRect(-w, -h, w * 2, h * 2);
+    ctx.scale(Math.abs(k), 1);
+    ctx.fillStyle = "#02040C"; ctx.beginPath(); ctx.roundRect(-45, -h / 2 + 24, 90, 26, 13); ctx.fill();
+    text("iPhone 17", 0, -10, { font: font(900, 62), dir: "ltr", fill: "#fff", glow: C.sky, glowBlur: 24 });
+    text("12:00", 0, -150, { font: font(900, 120), dir: "ltr", fill: "rgba(255,255,255,0.92)" });
+  } else {
+    const sc = ctx.createLinearGradient(0, -h / 2, 0, h / 2); sc.addColorStop(0, "#C9D2E8"); sc.addColorStop(1, "#8794B4");
+    ctx.fillStyle = sc; ctx.fillRect(-w, -h, w * 2, h * 2);
+    ctx.scale(Math.abs(k), 1);
+    ctx.fillStyle = "#1A2036"; ctx.beginPath(); ctx.roundRect(-150, -h / 2 + 30, 170, 170, 40); ctx.fill();
+    for (const [lx, ly] of [[-95, -h / 2 + 85], [-45, -h / 2 + 150], [-100, -h / 2 + 150]]) { ctx.fillStyle = "#05070E"; ctx.beginPath(); ctx.arc(lx + 20, ly, 28, 0, 7); ctx.fill(); }
+  }
+  ctx.restore();
+  // glass glint sweeping across
+  ctx.globalAlpha *= 0.5; const gx = lerp(-w, w, (t * 0.5) % 1);
+  const g = ctx.createLinearGradient(gx - 40, 0, gx + 40, 0); g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,0.7)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 50 * Math.abs(k) + 8); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- scene 1: 0–5 ----------
+function scene1(t) {
+  fillBg("#02040C", "#050C24");
+  const a = prog(t, 0.2, 1.6);
+  bgGlow(CX, CY + 80, 900 * a, "rgba(30,107,255,0.35)");
+  drawDust(t, C.sky, 0.7 * a);
+  // electric pulses before the can lands
+  if (t < 1.6) { const p = 0.3 + 0.7 * Math.abs(Math.sin(t * 24)); lightning(t, CX - 700, CY - 250, CX, CY - 40, `rgba(124,196,255,${p})`, 1); lightning(t, CX + 700, CY - 300, CX, CY - 40, `rgba(245,196,81,${p})`, 2); }
+  // smoke wisps
+  ctx.save(); for (let i = 0; i < 6; i++) { const x = CX + Math.sin(t * 0.6 + i * 1.7) * 520, y = 760 + Math.cos(t * 0.5 + i) * 40; const g = ctx.createRadialGradient(x, y, 0, x, y, 330); g.addColorStop(0, "rgba(60,110,200,0.22)"); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.globalAlpha = a; ctx.fillRect(x - 330, y - 330, 660, 660); } ctx.restore();
+
+  const pf = prog(t, 0.8, 0.5);
+  if (pf > 0) platform(CX, 830, 330 * eOutCubic(pf), C.sky);
+  // can: spins in the air then slams onto the platform at t=2.0
+  const drop = prog(t, 0.9, 1.1), rest = 760;
+  const y = lerp(-420, rest, eOutBounce(drop)), spin = (1 - drop) * 9;
+  const slam = prog(t, 2.0, 0.35);
+  const sq = 1 + 0.07 * Math.sin(slam * Math.PI) * (t > 2.0 ? 1 : 0);
+  if (t > 0.9) {
+    reflection(CX, y, 560, { yaw: spin, alpha: drop });
+    drawCan(CX, y - 30, 560, { yaw: spin, sx: 1 / sq, sy: sq, glow: C.sky, glowBlur: 40 + 60 * (t > 2 ? 1 : 0), shine: (t - 2) * 0.5, alpha: Math.min(1, drop * 3) });
+  }
+  sparks(t, 2.0, CX, 820, 90, 1100, ["#7CC4FF", "#F5C451", "#fff"], 1.5, 5);
+  // shockwave ring
+  const sw = prog(t, 2.0, 0.9); if (sw > 0 && sw < 1) { ctx.save(); ctx.strokeStyle = `rgba(124,196,255,${1 - sw})`; ctx.lineWidth = 8 * (1 - sw); ctx.beginPath(); ctx.ellipse(CX, 850, 200 + 900 * eOutCubic(sw), 40 + 200 * eOutCubic(sw), 0, 0, 7); ctx.stroke(); ctx.restore(); }
+  // title
+  const tk = eOutBack(prog(t, 2.6, 0.7));
+  if (tk > 0) {
+    ctx.save(); ctx.translate(CX, 190); ctx.scale(tk, tk);
+    text("أبو جنة", 0, -20, { font: font(900, 190), fill: goldGrad(0, 190), glow: C.gold, glowBlur: 50, stroke: "#4a3510", strokeW: 12 });
+    text("FOR YOU ENERGY", 0, 110, { font: font(900, 62), dir: "ltr", fill: C.white, glow: C.blue, glowBlur: 30 });
+    ctx.restore();
+  }
+  flash(Math.max(0, 1 - Math.abs(t - 2.0) / 0.3) * 0.9);
+}
+
+// ---------- scene 2: 5–11 ----------
+function scene2(t) {
+  const lt = t - 5;
+  fillBg("#050A1E", "#02040C");
+  bgGlow(CX, CY, 1100, "rgba(30,107,255,0.28)");
+  drawDust(t, C.gold, 0.6);
+  // moving speed lines
+  ctx.save(); ctx.strokeStyle = "rgba(124,196,255,0.18)"; ctx.lineWidth = 3;
+  const r = rng(77); for (let i = 0; i < 26; i++) { const y = r() * H, v = 600 + r() * 1400, x = ((r() * W + lt * v) % (W + 600)) - 300; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 220 - r() * 200, y); ctx.stroke(); }
+  ctx.restore();
+
+  // Tahoe emerges behind the 10 from t=8.6
+  const car = prog(t, 8.4, 1.0);
+  if (car > 0) {
+    ctx.save(); ctx.globalAlpha = car;
+    bgGlow(CX, 640, 800, "rgba(245,196,81,0.28)");
+    drawSUV(CX + (1 - eOutExpo(car)) * 700, 700, 1.55, t, { alpha: 1 });
+    ctx.restore();
+    text("شيفروليه تاهو", CX, 930, { font: font(900, 78), fill: goldGrad(930, 78), glow: C.gold, glowBlur: 30, alpha: prog(t, 9.0, 0.5) });
+  }
+
+  // numbers 1..10 orbit the can, then line up
+  const orbit = prog(t, 5.4, 1.8), line = prog(t, 7.4, 0.9);
+  for (let i = 1; i <= 10; i++) {
+    const ang = (i / 10) * Math.PI * 2 + lt * 3.2 * (1 - line * 0.5);
+    const rx = 520 * orbit, ry = 150 * orbit;
+    const ox = CX + Math.cos(ang) * rx, oy = 440 + Math.sin(ang) * ry, depth = (Math.sin(ang) + 1) / 2;
+    const lx = CX - 620 + (i - 1) * 138, ly = 130;
+    const k = eInOutCubic(line), x = lerp(ox, lx, k), y = lerp(oy, ly, k);
+    const sc = lerp(0.55 + depth * 0.75, 0.62, k) * eOutBack(prog(t, 5.3 + i * 0.05, 0.4));
+    ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+    text(String(i), 0, 0, { font: font(900, 150), dir: "ltr", fill: i === 10 && t > 8.2 ? goldGrad(0, 150) : "#EAF3FF", glow: i === 10 ? C.gold : C.blue, glowBlur: 36, stroke: "rgba(2,4,12,0.8)", strokeW: 10 });
+    ctx.restore();
+  }
+  // giant 10
+  const gk = eOutBack(prog(t, 8.0, 0.7));
+  if (gk > 0) {
+    ctx.save(); ctx.translate(CX, 470); ctx.scale(gk * 1.0, gk * 1.0);
+    text("10", 0, 0, { font: font(900, 560), dir: "ltr", fill: goldGrad(0, 560), glow: C.gold, glowBlur: 80, stroke: "#4a3510", strokeW: 16, alpha: 0.95 });
+    ctx.restore();
+  }
+  // can in front
+  const ck = eOutBack(prog(t, 5.0, 0.8));
+  const cy = 600 + Math.sin(lt * 2) * 12, cx = lerp(CX, CX - 520, eInOutCubic(prog(t, 8.2, 0.8)));
+  platform(cx, cy + 300, 250, C.sky);
+  drawCan(cx, cy, 520 * ck, { yaw: lt * 2, glow: C.sky, glowBlur: 50, shine: lt * 0.4 });
+  lightning(t, cx - 150, cy - 100, CX - 600, 440, "rgba(124,196,255,0.7)", 5, 2);
+
+  // caption
+  const cap = win(t, 7.6, 11, 0.5, 0.4);
+  if (cap > 0) { ctx.save(); ctx.globalAlpha = cap; ctx.fillStyle = "rgba(2,4,12,0.55)"; ctx.beginPath(); ctx.roundRect(CX - 560, 980, 1120, 80, 40); ctx.fill(); ctx.restore(); text("اجمع من 1 إلى 10 واربح تاهو", CX, 1021, { font: font(900, 54), alpha: cap, fill: "#fff" }); }
+  flash(Math.max(0, 1 - Math.abs(t - 5.0) / 0.2) * 0.8, "124,196,255");
+  flash(Math.max(0, 1 - Math.abs(t - 8.0) / 0.2) * 0.7, "255,230,150");
+}
+
+// ---------- scene 3: 11–17 ----------
+function scene3(t) {
+  const lt = t - 11;
+  fillBg("#06122E", "#02040C");
+  bgGlow(CX, CY, 1100, "rgba(245,196,81,0.18)");
+  drawDust(t, C.gold, 0.8);
+  // macro can: big, slowly turning, cropped
+  const zoom = lerp(2.1, 1.35, eOutCubic(prog(t, 11, 1.4)));
+  const cx = 600 + Math.sin(lt * 0.9) * 22, cy = 560 + lt * 8;
+  drawCan(cx, cy, 760 * zoom, { yaw: lt * 1.6, rot: -0.12, glow: C.blue, glowBlur: 90, shine: lt * 0.35 });
+  // glowing "جنة"
+  const jk = eOutBack(prog(t, 12.0, 0.7)), pulse = 1 + 0.05 * Math.sin(lt * 7);
+  if (jk > 0) {
+    ctx.save(); ctx.translate(1150, 330); ctx.scale(jk * pulse, jk * pulse);
+    text("جنة", 0, 0, { font: font(900, 340), fill: goldGrad(0, 340), glow: C.gold, glowBlur: 100, stroke: "#4a3510", strokeW: 16 });
+    ctx.restore();
+    sparks(t, 12.0, 1150, 330, 70, 700, ["#F5C451", "#FFF3C4"], 1.4, 9);
+  }
+  // iPhone 17
+  const pk = eOutBack(prog(t, 13.4, 0.8));
+  if (pk > 0) drawPhone(1450, 650, 0.9 * pk, lt * 2.4, t);
+  const cap = win(t, 13.8, 17, 0.5, 0.4);
+  text("لكيت جنة؟ اربح iPhone 17", 1250, 1000, { font: font(900, 62), alpha: cap, glow: C.blue, glowBlur: 30, stroke: "rgba(2,4,12,0.85)", strokeW: 12 });
+  flash(Math.max(0, 1 - Math.abs(t - 11) / 0.2) * 0.8);
+  flash(Math.max(0, 1 - Math.abs(t - 12.0) / 0.2) * 0.6, "255,230,150");
+}
+
+// ---------- scene 4: 17–22 ----------
+function scene4(t) {
+  const lt = t - 17;
+  fillBg("#07102A", "#02040C");
+  const sh = Math.max(0, 1 - lt / 0.5) * 10 * Math.sin(lt * 90);
+  ctx.save(); ctx.translate(sh, sh * 0.5);
+  bgGlow(CX, 520, 1000, "rgba(245,196,81,0.35)");
+  // burst rays
+  ctx.save(); ctx.translate(CX, 460); ctx.rotate(lt * 0.15);
+  for (let i = 0; i < 18; i++) { ctx.rotate(Math.PI * 2 / 18); ctx.fillStyle = `rgba(245,196,81,${0.1 * prog(t, 17.4, 0.6)})`; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(1500, -60); ctx.lineTo(1500, 60); ctx.fill(); }
+  ctx.restore();
+  drawDust(t, C.gold, 0.8);
+  drawSUV(CX - 40 + Math.sin(lt) * 20, 760, 1.25, t, { alpha: 0.9 * prog(t, 17.2, 0.6) });
+  // title slam
+  const k = prog(t, 17.3, 0.45), s = 3 - 2 * eOutBack(k, 2.2);
+  if (k > 0) {
+    ctx.save(); ctx.translate(CX, 360); ctx.scale(s, s); ctx.globalAlpha = Math.min(1, k * 3);
+    text("أبو جنة", 0, 0, { font: font(900, 330), fill: goldGrad(0, 330), glow: C.gold, glowBlur: 110, stroke: "#4a3510", strokeW: 20 });
+    ctx.restore();
+  }
+  sparks(t, 17.6, CX, 360, 130, 1500, ["#F5C451", "#FFF3C4", "#fff"], 1.6, 13);
+  // can returns in front
+  const ck = eOutBack(prog(t, 18.4, 0.7));
+  if (ck > 0) { platform(CX + 560, 960, 230, C.gold); drawCan(CX + 560, 700, 520 * ck, { yaw: lt * 1.5, glow: C.gold, glowBlur: 60, shine: lt * 0.4 }); }
+  const cap = win(t, 18.2, 22, 0.5, 0.4);
+  text("لكيت أبو جنة؟ اربح تاهو", CX - 330, 960, { font: font(900, 66), alpha: cap, stroke: "rgba(2,4,12,0.85)", strokeW: 12, glow: C.gold, glowBlur: 24 });
+  ctx.restore();
+  flash(Math.max(0, 1 - Math.abs(t - 17.3) / 0.15) * 1.0, "255,236,170");
+  flash(Math.max(0, 1 - Math.abs(t - 17.0) / 0.2) * 0.8);
+}
+
+// ---------- scene 5: 22–25 ----------
+function scene5(t) {
+  const lt = t - 22;
+  fillBg("#050A1E", "#02040C");
+  bgGlow(CX, 520, 950, "rgba(30,107,255,0.35)");
+  // energy lines converging on the can
+  ctx.save(); ctx.translate(CX, 470); const r = rng(31);
+  for (let i = 0; i < 40; i++) { const a = r() * Math.PI * 2, d0 = 300 + r() * 200, sp = 500 + r() * 900, d = ((d0 + lt * sp) % 1200); ctx.strokeStyle = i % 2 ? `rgba(124,196,255,${0.5 * (1 - d / 1200)})` : `rgba(245,196,81,${0.5 * (1 - d / 1200)})`; ctx.lineWidth = 3 + r() * 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * d, Math.sin(a) * d * 0.7); ctx.lineTo(Math.cos(a) * (d + 130), Math.sin(a) * (d + 130) * 0.7); ctx.stroke(); }
+  ctx.restore();
+  drawDust(t, C.sky, 0.7);
+  const ck = eOutBack(prog(t, 22.0, 0.7));
+  const hero = 1 + 0.03 * Math.sin(lt * 3);
+  platform(CX, 760, 300, C.sky);
+  reflection(CX, 470, 640 * ck * hero, { yaw: lt });
+  drawCan(CX, 470, 640 * ck * hero, { yaw: lt * 0.9, glow: C.sky, glowBlur: 90, shine: lt * 0.4 });
+  // three campaign lines in sequence
+  const lines = ["اجمع من 1 إلى 10 واربح تاهو", "لكيت جنة؟ اربح iPhone 17", "لكيت أبو جنة؟ اربح تاهو"];
+  lines.forEach((s, i) => {
+    const a = 22.3 + i * 0.75, k = prog(t, a, 0.4), e = eOutBack(k);
+    if (k > 0) {
+      const y = 180 + i * 100, x = CX + (i % 2 ? -1 : 1) * 560;
+      ctx.save(); ctx.globalAlpha = k; ctx.translate(x + (1 - e) * (i % 2 ? -300 : 300), y);
+      ctx.fillStyle = "rgba(2,4,12,0.5)"; ctx.beginPath(); ctx.roundRect(-340, -42, 680, 84, 42); ctx.fill();
+      ctx.strokeStyle = i === 1 ? C.sky : C.gold; ctx.lineWidth = 3; ctx.stroke();
+      ctx.restore();
+      text(s, x + (1 - e) * (i % 2 ? -300 : 300), y, { font: font(900, 46), alpha: k });
+    }
+  });
+  const end = prog(t, 23.6, 0.5);
+  text("أبو جنة FOR YOU", CX, 960, { font: font(900, 96), fill: goldGrad(960, 96), glow: C.gold, glowBlur: 50, alpha: end, stroke: "#4a3510", strokeW: 10 });
+  text("جرّب حظك.. وخلّي الفوز إلك", CX, 1042, { font: font(700, 38), alpha: end * 0.9 });
+  flash(Math.max(0, 1 - Math.abs(t - 22) / 0.2) * 0.8);
+}
+
+function render(t) {
+  ctx.clearRect(0, 0, W, H);
+  if (t < 5) scene1(t); else if (t < 11) scene2(t); else if (t < 17) scene3(t); else if (t < 22) scene4(t); else scene5(t);
+  // whip cross-fade into the next scene
+  for (const b of [5, 11, 17, 22]) flash(Math.max(0, 1 - Math.abs(t - b) / 0.12) * 0.35, "124,196,255");
+  vignette(0.6);
+  grain(t);
+  flash(1 - prog(t, 0, 0.3), "0,0,0");
+  flash(prog(t, 24.5, 0.5), "0,0,0");
+}
+
+window.render = render;
+window.DURATION = DURATION;
+window.ready = ready;
+</script>
+</body>
+</html>

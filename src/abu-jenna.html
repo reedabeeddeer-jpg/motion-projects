@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Abu Jenna - FOR YOU Energy</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; height: 100vh; width: auto; margin: 0 auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// 25 s silent vertical (9:16) ad for "Abu Jenna - FOR YOU Energy". No audio: all messages are on-screen Arabic text.
+// Render: npm run jenna:render   (preview stills: npm run jenna:preview)
+const W = 1080, H = 1920, CX = W / 2, CY = H / 2;
+const DURATION = 25;
+
+// ---- edit these ----
+const TEXT = {
+  brand: "أبو جنة",
+  product: "FOR YOU",
+  s1a: "طاقة وتحدّي",
+  s1b: "وجوائز تغيّر حياتك",
+  s2: "اجمع من 1 إلى 10",
+  s2b: "واربح تاهو",
+  s3a: "لكيت اسم",
+  s3b: "جنة؟",
+  s3c: "اربح iPhone 17",
+  s4a: "لكيت اسم",
+  s4c: "اربح تاهو",
+  end1: "اجمع من 1 إلى 10 واربح تاهو",
+  end2: "لكيت جنة؟ اربح iPhone 17",
+  end3: "لكيت أبو جنة؟ اربح تاهو",
+  endBrand: "أبو جنة فور يو",
+  endCta: "جرّب حظك",
+};
+const CAN_SRC = "../assets/abu-jenna/can.png";
+const GOLD = ["#FFF1B0", "#FFC845", "#C98A12"];
+
+const ctx = document.getElementById("c").getContext("2d");
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eOutBack = k => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const eInOut = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const font = (w, s) => `${w} ${s}px Cairo`;
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+// scene weight: 1 inside [a,b], with short fades (hard cuts feel: fade length is tiny)
+const win = (t, a, b, f = 0.25) => clamp((t - a) / f) * clamp((b - t) / f);
+
+let canImg = null;
+
+// ---------- shared drawing helpers ----------
+function bg(t, mood) {
+  // mood: 0 = near black, 1 = deep blue studio, 2 = blue/gold burst
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  const a = lerp(5, 14, mood > 0 ? 1 : 0);
+  g.addColorStop(0, `rgb(${a},${a + 4},${a + 22 * (mood > 0 ? 1 : 0.3)})`);
+  g.addColorStop(0.55, mood >= 1 ? "#0A1B4D" : "#05060F");
+  g.addColorStop(1, mood >= 2 ? "#1A1030" : "#02030A");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if (mood >= 1) {
+    const r = ctx.createRadialGradient(CX, CY + 60, 40, CX, CY + 60, 900);
+    r.addColorStop(0, mood >= 2 ? "rgba(255,200,69,0.30)" : "rgba(40,110,255,0.35)");
+    r.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = r; ctx.fillRect(0, 0, W, H);
+  }
+}
+
+const SP = (() => { const r = rng(7); return Array.from({ length: 120 }, () => ({
+  x: r() * W, y: r() * H, s: 2 + r() * 5, v: 80 + r() * 260, ph: r() * 6.28, gold: r() > 0.5 })); })();
+function sparks(t, amount = 1, speedUp = 1) {
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const n = Math.floor(SP.length * amount);
+  for (let i = 0; i < n; i++) {
+    const p = SP[i];
+    const y = ((p.y - t * p.v * speedUp) % H + H) % H;
+    const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * 5 + p.ph));
+    ctx.fillStyle = p.gold ? `rgba(255,200,69,${tw})` : `rgba(90,170,255,${tw})`;
+    ctx.shadowColor = p.gold ? "#FFC845" : "#4FA3FF"; ctx.shadowBlur = 18;
+    ctx.beginPath(); ctx.arc(p.x + Math.sin(t * 1.3 + p.ph) * 20, y, p.s, 0, 6.283); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function bolt(x, y, len, col, a, seed) {
+  const r = rng(seed); ctx.save();
+  ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = 5; ctx.shadowColor = col; ctx.shadowBlur = 26;
+  ctx.beginPath(); ctx.moveTo(x, y);
+  for (let i = 1; i <= 7; i++) ctx.lineTo(x + (r() - 0.5) * 90, y + (len / 7) * i);
+  ctx.stroke(); ctx.restore();
+}
+
+// can with fake 3D turn: horizontal squash by |cos| + slight mirror feel, tilt, glow
+function can(x, y, h, o = {}) {
+  const { turn = 0, tilt = 0, alpha = 1, glow = 0.5, glowCol = "rgba(60,140,255,0.9)", flash = 0 } = o;
+  if (!canImg) return;
+  const w = h * canImg.width / canImg.height;
+  const sx = Math.max(0.12, Math.abs(Math.cos(turn)));
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(tilt);
+  ctx.globalAlpha = alpha;
+  ctx.shadowColor = glowCol; ctx.shadowBlur = 70 * glow;
+  ctx.scale(sx, 1);
+  if (Math.cos(turn) < 0) ctx.scale(-1, 1); // back side hint: mirrored when facing away
+  ctx.drawImage(canImg, -w / 2, -h / 2, w, h);
+  if (flash > 0) { ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = flash; ctx.drawImage(canImg, -w / 2, -h / 2, w, h); }
+  ctx.restore();
+}
+
+function reflection(x, y, h, a) { // soft mirror under can on the platform
+  if (!canImg) return;
+  const w = h * canImg.width / canImg.height;
+  ctx.save(); ctx.translate(x, y); ctx.scale(1, -0.35); ctx.globalAlpha = a * 0.28;
+  ctx.drawImage(canImg, -w / 2, -h, w, h); ctx.restore();
+}
+
+function text(str, x, y, f, fill, a = 1, o = {}) {
+  ctx.save(); ctx.globalAlpha = a; ctx.font = f; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.direction = "rtl";
+  if (o.shadow) { ctx.shadowColor = o.shadow; ctx.shadowBlur = o.blur ?? 30; }
+  if (o.stroke) { ctx.lineWidth = o.sw ?? 8; ctx.strokeStyle = o.stroke; ctx.lineJoin = "round"; ctx.strokeText(str, x, y); }
+  ctx.fillStyle = fill; ctx.fillText(str, x, y); ctx.restore();
+}
+function goldText(str, x, y, size, a = 1, wgt = 900) {
+  const g = ctx.createLinearGradient(0, y - size / 2, 0, y + size / 2);
+  g.addColorStop(0, GOLD[0]); g.addColorStop(0.5, GOLD[1]); g.addColorStop(1, GOLD[2]);
+  text(str, x, y, font(wgt, size), g, a, { shadow: "rgba(255,170,30,0.8)", blur: 36, stroke: "rgba(60,30,0,0.55)", sw: size * 0.06 });
+}
+function pill(x, y, w, h, a, col = "rgba(255,200,69,0.95)") {
+  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = col; ctx.shadowColor = "rgba(255,170,30,0.7)"; ctx.shadowBlur = 40;
+  ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2); ctx.fill(); ctx.restore();
+}
+// caption with slide-up + back-ease; returns nothing
+function caption(str, y, size, t, start, end, o = {}) {
+  const k = prog(t, start, 0.45), out = 1 - prog(t, end - 0.2, 0.2);
+  if (k <= 0 || out <= 0) return;
+  const e = eOutBack(k);
+  ctx.save(); ctx.translate(CX, y + (1 - e) * 60); ctx.scale(0.8 + 0.2 * e, 0.8 + 0.2 * e);
+  if (o.gold) goldText(str, 0, 0, size, clamp(k * 2) * out);
+  else text(str, 0, 0, font(900, size), o.fill ?? "#fff", clamp(k * 2) * out, { shadow: "rgba(40,120,255,0.9)", blur: 34, stroke: "rgba(0,10,40,0.6)", sw: size * 0.07 });
+  ctx.restore();
+}
+
+// ---------- generic vehicle / phone silhouettes (no brands, no logos) ----------
+function suv(x, y, s, a, glow = 1) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.globalAlpha = a;
+  const body = ctx.createLinearGradient(0, -140, 0, 40);
+  body.addColorStop(0, "#2a2f3d"); body.addColorStop(0.5, "#0c0e14"); body.addColorStop(1, "#000");
+  ctx.shadowColor = `rgba(255,200,69,${0.7 * glow})`; ctx.shadowBlur = 50;
+  ctx.fillStyle = body; ctx.beginPath();
+  ctx.moveTo(-300, 20); ctx.lineTo(-300, -40); ctx.quadraticCurveTo(-296, -70, -250, -78);
+  ctx.lineTo(-250, -100); ctx.lineTo(-215, -185); ctx.quadraticCurveTo(-205, -198, -185, -198);
+  ctx.lineTo(190, -198); ctx.quadraticCurveTo(215, -196, 230, -170); ctx.lineTo(262, -90);
+  ctx.lineTo(286, -64); ctx.quadraticCurveTo(310, -56, 310, -30); ctx.lineTo(310, 20); ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0;
+  // windows
+  ctx.fillStyle = "rgba(120,180,255,0.35)";
+  ctx.beginPath(); ctx.moveTo(-200, -108); ctx.lineTo(-180, -176); ctx.lineTo(-20, -176); ctx.lineTo(-20, -108); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0, -108); ctx.lineTo(0, -176); ctx.lineTo(180, -176); ctx.lineTo(236, -108); ctx.closePath(); ctx.fill();
+  // gold edge light
+  ctx.strokeStyle = "rgba(255,200,69,0.8)"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-296, -42); ctx.lineTo(306, -32); ctx.stroke();
+  // headlights
+  ctx.fillStyle = "rgba(255,240,200,0.95)"; ctx.shadowColor = "#fff"; ctx.shadowBlur = 30;
+  ctx.fillRect(288, -52, 22, 12); ctx.shadowBlur = 0;
+  // wheels
+  for (const wx of [-190, 190]) {
+    ctx.fillStyle = "#05060a"; ctx.beginPath(); ctx.arc(wx, 24, 56, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = "rgba(255,200,69,0.85)"; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(wx, 24, 34, 0, 6.283); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function phone(x, y, h, rot, a, t) {
+  const w = h * 0.49, sx = Math.max(0.1, Math.abs(Math.cos(rot)));
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-0.12); ctx.scale(sx, 1); ctx.globalAlpha = a;
+  ctx.shadowColor = "rgba(90,170,255,0.9)"; ctx.shadowBlur = 60;
+  const body = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+  body.addColorStop(0, "#9aa3b5"); body.addColorStop(0.5, "#e8ecf4"); body.addColorStop(1, "#7d8699");
+  ctx.fillStyle = body; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, w * 0.16); ctx.fill();
+  ctx.shadowBlur = 0;
+  const sg = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+  sg.addColorStop(0, "#0b2a7a"); sg.addColorStop(1, "#05060f");
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.roundRect(-w / 2 + 12, -h / 2 + 12, w - 24, h - 24, w * 0.12); ctx.fill();
+  // moving light streak on the glass
+  ctx.save(); ctx.beginPath(); ctx.roundRect(-w / 2 + 12, -h / 2 + 12, w - 24, h - 24, w * 0.12); ctx.clip();
+  const sx0 = lerp(-w, w, (t * 0.6) % 1);
+  ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.rotate(0.5); ctx.fillRect(sx0 - 20, -h, 46, h * 2); ctx.restore();
+  // pill camera cut-out
+  ctx.fillStyle = "#000"; ctx.beginPath(); ctx.roundRect(-w * 0.17, -h / 2 + 30, w * 0.34, 26, 13); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- SCENE 1 (0-5): dark, sparks, can out of smoke, spin, slam on platform ----------
+const smokeR = rng(3), SMOKE = Array.from({ length: 22 }, () => ({ x: CX + (smokeR() - 0.5) * 520, y: 1280 + smokeR() * 260, r: 160 + smokeR() * 220, ph: smokeR() * 6 }));
+function smoke(t, a) {
+  ctx.save(); ctx.globalAlpha = a;
+  for (const p of SMOKE) {
+    const x = p.x + Math.sin(t * 0.8 + p.ph) * 60, y = p.y - ((t * 90 + p.ph * 50) % 500) * 0.3;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, p.r);
+    g.addColorStop(0, "rgba(120,150,230,0.22)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, p.r, 0, 6.283); ctx.fill();
+  }
+  ctx.restore();
+}
+function platform(cx, y, a) {
+  ctx.save(); ctx.globalAlpha = a;
+  const g = ctx.createLinearGradient(0, y - 20, 0, y + 90);
+  g.addColorStop(0, "#1a2140"); g.addColorStop(1, "#000");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, y + 30, 360, 70, 0, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = "rgba(90,170,255,0.9)"; ctx.lineWidth = 5; ctx.shadowColor = "#3b8cff"; ctx.shadowBlur = 30;
+  ctx.beginPath(); ctx.ellipse(cx, y + 30, 360, 70, 0, 0, 6.283); ctx.stroke(); ctx.restore();
+}
+function scene1(t) {
+  const a = win(t, 0, 5.05, 0.01);
+  if (a <= 0) return;
+  bg(t, t > 2.9 ? 1 : 0);
+  sparks(t, 0.5 + 0.5 * prog(t, 0, 3), 1.4);
+  smoke(t, prog(t, 0.3, 1.2) * (1 - prog(t, 3.2, 1.2)));
+  for (const [i, b] of [[0.2, 1], [0.5, 2], [0.8, 3], [1.1, 4]].map(([s, i]) => [s, i]))
+    if (t > b && t < b + 0.18) bolt(200 + i * 190, 100 + i * 40, 700, i % 2 ? "#FFC845" : "#5AA9FF", 1 - (t - b) / 0.18, 40 + i);
+  const platY = 1440;
+  platform(CX, platY, prog(t, 2.2, 0.5));
+  if (t < 3.0) {
+    // emerging + spinning in the air
+    const k = prog(t, 0.6, 2.3), e = eInOut(k);
+    can(CX, lerp(1250, 760, e) + Math.sin(t * 3) * 14, 760, { turn: t * 5.2, tilt: Math.sin(t * 2) * 0.08, alpha: clamp(k * 2.4), glow: 0.8 });
+  } else {
+    // slam down onto the platform
+    const k = prog(t, 3.0, 0.35), drop = eOutCubic(k);
+    const y = lerp(740, platY - 360, drop * drop) + (t > 3.35 ? -Math.max(0, 28 * Math.exp(-(t - 3.35) * 8) * Math.sin((t - 3.35) * 38)) : 0);
+    const settle = prog(t, 3.0, 0.45);
+    can(CX, y, 760, { turn: lerp(Math.PI * 2, 0, eOutExpo(settle)), glow: 1, flash: 0.9 * Math.exp(-Math.max(0, t - 3.35) * 5) * (t > 3.35 ? 1 : 0) });
+    reflection(CX, platY - 10, 760, prog(t, 3.35, 0.4));
+    if (t > 3.35 && t < 3.7) { // shockwave ring + white flash
+      const r = (t - 3.35) / 0.35;
+      ctx.save(); ctx.globalAlpha = 1 - r; ctx.strokeStyle = "#9ad0ff"; ctx.lineWidth = 8; ctx.shadowColor = "#5AA9FF"; ctx.shadowBlur = 30;
+      ctx.beginPath(); ctx.ellipse(CX, platY + 30, 360 + r * 520, 70 + r * 120, 0, 0, 6.283); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = `rgba(255,255,255,${0.7 * (1 - r)})`; ctx.fillRect(0, 0, W, H);
+    }
+  }
+  caption(TEXT.s1a, 250, 150, t, 3.5, 5.05, { gold: true });
+  caption(TEXT.s1b, 410, 84, t, 3.75, 5.05);
+  if (t < 1.1) text(TEXT.brand, CX, 360, font(900, 150), "#fff", 0, {}); // reserved no-op for layout symmetry
+}
+
+// ---------- SCENE 2 (5-11): numbers 1..10 race around can, 10 huge, SUV behind ----------
+function scene2(t) {
+  if (t < 5 || t >= 11.05) return;
+  const l = t - 5;
+  bg(t, 1); sparks(t, 0.6, 1);
+  platform(CX, 1500, 1);
+  // SUV rises behind the huge 10
+  const sk = prog(l, 3.1, 0.9);
+  if (sk > 0) suv(CX, lerp(1300, 1010, eOutCubic(sk)), 1.35, clamp(sk * 1.5));
+  // central can
+  reflection(CX, 1490, 700, 1);
+  can(CX, 1490 - 350 + Math.sin(t * 2) * 8, 700, { turn: Math.sin(l * 1.6) * 0.45, glow: 0.8 });
+  // numbers orbit the can until l=2.4 then line up
+  const orbit = 1 - prog(l, 2.3, 0.7);
+  for (let n = 1; n <= 10; n++) {
+    const appear = prog(l, 0.15 * n * 0.8, 0.25); if (appear <= 0) continue;
+    if (n === 10 && l >= 2.9) continue; // handled below as giant
+    const ang = l * 4.2 + n * (6.283 / 10);
+    const ox = CX + Math.cos(ang) * 400, oy = 760 + Math.sin(ang) * 120 * 1.0 + Math.sin(ang) * 0;
+    const lineX = 130 + (n - 1) * 91, lineY = 1640;
+    const x = lerp(lineX, ox, orbit), y = lerp(lineY, oy, orbit);
+    const sc = (0.75 + 0.25 * Math.sin(ang + 1.57) * orbit + 0.25) * appear;
+    ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+    goldText(String(n), 0, 0, 120, clamp(appear * 1.2) * (0.55 + 0.45 * (Math.sin(ang) * 0.5 + 0.5 * orbit + 0.5 * (1 - orbit))));
+    ctx.restore();
+  }
+  // giant 10
+  if (l >= 2.4) {
+    const k = prog(l, 2.4, 0.55), e = eOutBack(k);
+    ctx.save(); ctx.translate(CX, 640); ctx.scale(0.4 + 0.6 * e, 0.4 + 0.6 * e);
+    goldText("10", 0, 0, 640, clamp(k * 2) * (1 - 0.0));
+    ctx.restore();
+    if (l > 2.4 && l < 2.8) { ctx.fillStyle = `rgba(255,230,160,${0.5 * (1 - (l - 2.4) / 0.4)})`; ctx.fillRect(0, 0, W, H); }
+  }
+  caption(TEXT.s2, 250, 108, t, 5.4, 11, {});
+  caption(TEXT.s2b, 1810, 120, t, 8.2, 11, { gold: true });
+}
+
+// ---------- SCENE 3 (11-17): macro can + glowing "جنة" + phone ----------
+function scene3(t) {
+  if (t < 11 || t >= 17.05) return;
+  const l = t - 11;
+  bg(t, 1); sparks(t, 0.9, 1.6);
+  // macro: big can sliding/rotating, partly out of frame
+  const mk = prog(l, 0, 0.5);
+  can(lerp(180, 310, eOutCubic(mk)), 1160 + Math.sin(t * 2) * 12, lerp(1500, 1260, eOutCubic(mk)), { turn: Math.sin(l * 1.3) * 0.8, tilt: -0.08, glow: 0.7 });
+  // "جنة" appears in gold with burst
+  if (l > 1.2) {
+    const k = prog(l, 1.2, 0.5), e = eOutBack(k);
+    ctx.save(); ctx.translate(CX, 470); ctx.scale(0.3 + 0.7 * e, 0.3 + 0.7 * e);
+    goldText(TEXT.s3b, 0, 0, 340, clamp(k * 2));
+    ctx.restore();
+    if (l < 1.7) { ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.6 * (1 - (l - 1.2) / 0.5);
+      const g = ctx.createRadialGradient(CX, 470, 20, CX, 470, 700); g.addColorStop(0, "#FFD36A"); g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+  }
+  caption(TEXT.s3a, 250, 100, t, 12.0, 17, {});
+  // phone
+  const pk = prog(l, 2.6, 0.6);
+  if (pk > 0) phone(790, lerp(2000, 1330, eOutBack(pk)), 700, Math.sin(l * 1.6) * 0.9, clamp(pk * 2), t);
+  caption(TEXT.s3c, 1810, 120, t, 14.2, 17, { gold: true });
+}
+
+// ---------- SCENE 4 (17-22): "أبو جنة" slams in, golden burst, SUV behind, can front ----------
+function scene4(t) {
+  if (t < 17 || t >= 22.05) return;
+  const l = t - 17;
+  bg(t, 2); sparks(t, 1, 2);
+  // radial gold rays
+  ctx.save(); ctx.translate(CX, 760); ctx.rotate(l * 0.2); ctx.globalAlpha = 0.28 * clamp(l * 2);
+  for (let i = 0; i < 18; i++) {
+    ctx.rotate(6.283 / 18); const g = ctx.createLinearGradient(0, 0, 1300, 0);
+    g.addColorStop(0, "rgba(255,200,69,0.9)"); g.addColorStop(1, "rgba(255,200,69,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(1300, -40); ctx.lineTo(1300, 40); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  suv(CX, 1000, 1.45, 0.55 * prog(l, 0.4, 0.6));
+  // brand name slams toward the screen
+  const k = prog(l, 0.1, 0.45), s = lerp(5, 1, eOutExpo(k));
+  ctx.save(); ctx.translate(CX, 560); ctx.scale(s, s);
+  goldText(TEXT.brand, 0, 0, 290, clamp(k * 3)); ctx.restore();
+  if (l > 0.5 && l < 0.9) { ctx.fillStyle = `rgba(255,235,180,${0.65 * (1 - (l - 0.5) / 0.4)})`; ctx.fillRect(0, 0, W, H); }
+  // can in front
+  const ck = prog(l, 0.9, 0.7);
+  reflection(CX, 1620, 640, ck);
+  can(CX, lerp(1900, 1300, eOutBack(ck)), 640, { turn: Math.sin(l * 1.8) * 0.3, glow: 1, glowCol: "rgba(255,200,69,0.9)" });
+  caption(TEXT.s4a, 840, 92, t, 18.1, 22, {});
+  caption(TEXT.s4c, 1745, 128, t, 19.4, 22, { gold: true });
+}
+
+// ---------- SCENE 5 (22-25): hero can, energy lines, three campaign lines in turn, closing line ----------
+function scene5(t) {
+  if (t < 22) return;
+  const l = t - 22;
+  bg(t, 2); sparks(t, 1, 3);
+  // energy lines streaking upward (blue + gold)
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const r = rng(21);
+  for (let i = 0; i < 26; i++) {
+    const x = r() * W, sp = 900 + r() * 1400, len = 160 + r() * 380, y = ((r() * H * 2 - t * sp) % (H + len) + H + len) % (H + len) - len;
+    ctx.strokeStyle = i % 2 ? "rgba(255,200,69,0.7)" : "rgba(80,160,255,0.8)"; ctx.lineWidth = 3 + r() * 5;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + len); ctx.stroke();
+  }
+  ctx.restore();
+  const k = prog(l, 0, 0.5);
+  reflection(CX, 1500, 900, k);
+  can(CX, lerp(1700, 1010, eOutBack(k)), 900, { turn: Math.sin(l * 1.2) * 0.12, glow: 1.2, glowCol: "rgba(255,200,69,0.9)" });
+  // three lines, one after another, stacked top; each has a gold pill behind
+  const lines = [TEXT.end1, TEXT.end2, TEXT.end3];
+  lines.forEach((s, i) => {
+    const st = 0.1 + i * 0.28, kk = prog(l, st, 0.3); if (kk <= 0) return;
+    const y = 190 + i * 150, e = eOutBack(kk);
+    ctx.save(); ctx.translate(CX + (1 - e) * 600, y);
+    pill(0, 0, 940, 112, clamp(kk * 2), "rgba(8,20,60,0.78)");
+    ctx.restore();
+    ctx.save(); ctx.translate(CX + (1 - e) * 600, y);
+    text(s, 0, 4, font(900, 56), "#FFE08A", clamp(kk * 2), { shadow: "rgba(255,170,30,0.8)", blur: 24 });
+    ctx.restore();
+  });
+  // closing brand line (last 1.2 s)
+  const ek = prog(l, 1.8, 0.4);
+  if (ek > 0) {
+    const e = eOutBack(ek);
+    ctx.save(); ctx.translate(CX, 1640); ctx.scale(0.7 + 0.3 * e, 0.7 + 0.3 * e);
+    goldText(TEXT.endBrand, 0, 0, 120, clamp(ek * 2)); ctx.restore();
+    caption(TEXT.endCta, 1790, 84, t, 23.1, 25.5, {});
+  }
+}
+
+function render(t) {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+  scene1(t); scene2(t); scene3(t); scene4(t); scene5(t);
+  // vignette for the whole film
+  const v = ctx.createRadialGradient(CX, CY, 500, CX, CY, 1250);
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,0.5)");
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = (async () => {
+  await Promise.all(["700", "900"].map(w => document.fonts.load(font(w, 40), "عربي Aa iPhone 10")));
+  canImg = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = CAN_SRC; });
+  render(0);
+})();
+
+if (!navigator.webdriver) {
+  window.ready.then(() => { const t0 = performance.now(); (function loop(now) { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); })(t0); });
+}
+</script>
+</body>
+</html>
