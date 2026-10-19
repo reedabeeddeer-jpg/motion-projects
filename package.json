@@ -36,7 +36,9 @@
     "ai4k:preview": "node scripts/render.mjs --src src/ai-4k.html --preview --times 3.5,8.8,14.5,19.8,25,30",
     "ai4k:render": "node scripts/render.mjs --src src/ai-4k.html --audio output/ai-4k-soundtrack.wav --out output/ai-4k.mp4",
     "ramadan-clasico:audio": "python3 ramadan-clasico/soundtrack.py",
-    "ramadan-clasico:render": "node scripts/render.mjs --src ramadan-clasico/motion.html --audio output/ramadan-clasico-soundtrack.wav --out output/ramadan-clasico.mp4"
+    "ramadan-clasico:render": "node scripts/render.mjs --src ramadan-clasico/motion.html --audio output/ramadan-clasico-soundtrack.wav --out output/ramadan-clasico.mp4",
+    "count:preview": "node scripts/render.mjs --src src/count.html --preview --times 0.3,10.2,30.4,59",
+    "count:render": "node scripts/render.mjs --src src/count.html --audio none --out output/count-0-100.mp4"
   },
   "devDependencies": {
     "playwright": "1.56.1"

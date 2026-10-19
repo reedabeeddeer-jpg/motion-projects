@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>عدّاد من 0 إلى 100</title>
+<style>
+  @font-face { font-family: "Cairo"; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Cairo"; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+FE70-FEFF; }
+  @font-face { font-family: "Cairo"; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+  html, body { margin: 0; background: #0B0F1F; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Counts 0 → 100 in English digits, laid out right-to-left.
+// 1920x1080, rendered at 30fps for 60s = 1800 frames.
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2 + 20;
+const DURATION = 60;
+const START = 0.5, END = 57.5;              // 0 shows at START, 100 lands at END, then holds
+const STEP = (END - START) / 100;            // seconds per number (~0.57s)
+const ctx = document.getElementById("c").getContext("2d");
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const eOut = k => 1 - Math.pow(1 - k, 3);
+const DIGIT_FONT = `900 420px "Cairo"`;
+
+function background(t) {
+  const g = ctx.createRadialGradient(CX, CY, 50, CX, CY, 1100);
+  g.addColorStop(0, "#1B2550"); g.addColorStop(1, "#070A16");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // slow drifting rings
+  ctx.save(); ctx.translate(CX, CY);
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc(0, 0, 330 + i * 70 + Math.sin(t * 0.8 + i) * 8, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(242,193,78,${0.08 - i * 0.02})`; ctx.lineWidth = 2; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// progress ring filling counter-clockwise from the top (right-to-left feel)
+function ring(p) {
+  ctx.save(); ctx.translate(CX, CY);
+  ctx.beginPath(); ctx.arc(0, 0, 300, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 14; ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 300, -Math.PI / 2, -Math.PI / 2 - p * Math.PI * 2, true);
+  ctx.strokeStyle = "#F2C14E"; ctx.lineCap = "round"; ctx.lineWidth = 14; ctx.stroke();
+  ctx.restore();
+}
+
+// draws the number; digits enter one by one from the right edge to the left
+function number(n, k) {
+  const s = String(n);
+  ctx.font = s.length === 3 ? `900 340px "Cairo"` : DIGIT_FONT; ctx.textBaseline = "middle"; ctx.direction = "ltr"; ctx.textAlign = "left";
+  const widths = [...s].map(d => ctx.measureText(d).width);
+  const total = widths.reduce((a, b) => a + b, 0);
+  let x = CX + total / 2;                      // start from the right edge
+  for (let i = s.length - 1; i >= 0; i--) {    // rightmost digit first
+    x -= widths[i];
+    const order = s.length - 1 - i;
+    const p = eOut(clamp((k - order * 0.18) / 0.55));
+    ctx.save();
+    ctx.globalAlpha = p;
+    ctx.translate(x + (1 - p) * 90, CY + 20); // slides in leftward
+    const g = ctx.createLinearGradient(0, -170, 0, 170);
+    g.addColorStop(0, "#FFF4D0"); g.addColorStop(1, "#F2C14E");
+    ctx.fillStyle = g;
+    ctx.shadowColor = "rgba(242,193,78,0.45)"; ctx.shadowBlur = 40;
+    ctx.fillText(s[i], 0, 0);
+    ctx.restore();
+  }
+}
+
+// bottom bar filling from right to left with 0/100 labels
+function bar(p) {
+  const L = 360, R = W - 360, Y = 960;
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.beginPath(); ctx.roundRect(L, Y - 6, R - L, 12, 6); ctx.fill();
+  ctx.fillStyle = "#F2C14E";
+  const w = (R - L) * p;
+  ctx.beginPath(); ctx.roundRect(R - w, Y - 6, Math.max(w, 12), 12, 6); ctx.fill();
+  ctx.font = `900 36px "Cairo"`; ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.textBaseline = "middle";
+  ctx.direction = "ltr";
+  ctx.textAlign = "left"; ctx.fillText("0", R + 24, Y);
+  ctx.textAlign = "right"; ctx.fillText("100", L - 24, Y);
+}
+
+function title() {
+  ctx.direction = "rtl"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  ctx.font = `700 64px "Cairo"`; ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.fillText("العدّ من 0 إلى 100", W - 120, 120);
+}
+
+window.DURATION = DURATION;
+window.render = async t => {
+  const n = clamp(Math.floor((t - START) / STEP), 0, 100);
+  const k = t < START ? 0 : n === 100 ? clamp((t - (START + 100 * STEP)) / STEP) : ((t - START) / STEP) % 1;
+  ctx.clearRect(0, 0, W, H);
+  background(t);
+  ring(n / 100);
+  number(n, n === 100 && t >= END ? Math.max(k, 1) : k);
+  bar(n / 100);
+  title();
+  if (n === 100 && t >= END) {                 // finish pulse
+    const f = clamp((t - END) / 0.6);
+    ctx.save(); ctx.translate(CX, CY);
+    ctx.beginPath(); ctx.arc(0, 0, 300 + f * 220, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(242,193,78,${0.6 * (1 - f)})`; ctx.lineWidth = 10; ctx.stroke();
+    ctx.restore();
+  }
+};
+window.ready = document.fonts.load(DIGIT_FONT, "0123456789")
+  .then(() => document.fonts.load(`700 64px "Cairo"`, "العدّ 0123456789"))
+  .then(() => window.render(0));
+</script>
+</body>
+</html>
