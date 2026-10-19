@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>المعادلة التربيعية - الثالث المتوسط</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2212, U+00D7, U+00F7; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2212, U+00D7, U+00F7; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2212, U+00D7, U+00F7; }
+  html, body { margin: 0; background: #0E2A47; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, CX = W / 2;
+const C = {
+  bg: "#0E2A47", bg2: "#14406B", board: "#10382E", boardEdge: "#8B5A2B", chalk: "#F4F1E8",
+  yellow: "#FFD54A", cyan: "#5EE0F2", pink: "#FF7AA8", green: "#6BE39A", orange: "#FFA24C", muted: "#9DB6CF",
+};
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- dialogue ----------
+// who: T = teacher, S = student. dur = seconds the line stays on screen (also the slot for the voice take).
+// Keep DURS in scripts/math_quadratic_soundtrack.py in sync with this list.
+const GAP = 0.5, INTRO = 3.2, OUTRO = 3.0;
+const LINES = [
+  { who: "T", dur: 4.4, text: "أهلاً بكم يا أبطال الثالث المتوسط! اليوم نتعلّم حَلَّ المعادلة التربيعية بالقانون العام." },
+  { who: "S", dur: 2.6, text: "أستاذ، ما هي المعادلة التربيعية؟" },
+  { who: "T", dur: 6.0, text: "هي معادلة أعلى أُسٍّ فيها اثنان، وصورتها العامة: أ س تربيع، زائد ب س، زائد جيم، يساوي صفراً." },
+  { who: "T", dur: 5.6, text: "خُذْ هذا المثال: س تربيع، ناقص خمسة س، زائد ستة، يساوي صفراً. حدِّدْ قيم أ، وب، وجيم." },
+  { who: "S", dur: 4.0, text: "أ تساوي واحد، وب تساوي سالب خمسة، وجيم تساوي ستة." },
+  { who: "T", dur: 4.6, text: "أحسنتِ! الآن نحسب المُمَيِّز: ب تربيع، ناقص أربعة في أ في جيم." },
+  { who: "S", dur: 6.2, text: "خمسة وعشرون، ناقص أربعة في واحد في ستة، أي خمسة وعشرين ناقص أربعة وعشرين. المُمَيِّز يساوي واحد." },
+  { who: "T", dur: 8.6, text: "ممتاز! المُمَيِّز موجب، إذن للمعادلة جذران حقيقيان مختلفان. والقانون العام: س تساوي سالب ب، زائد أو ناقص جذر المُمَيِّز، على اثنين أ." },
+  { who: "S", dur: 8.6, text: "سالب سالب خمسة يصير خمسة، زائد أو ناقص واحد، على اثنين. فالحل الأول: ستة على اثنين يساوي ثلاثة، والحل الثاني: أربعة على اثنين يساوي اثنين." },
+  { who: "T", dur: 7.2, text: "صحيح! الحلّان: س تساوي ثلاثة، أو س تساوي اثنين. وللتأكُّد نُعَوِّض: تسعة، ناقص خمسة عشر، زائد ستة، يساوي صفراً." },
+  { who: "S", dur: 2.8, text: "رائع! وماذا لو كان المُمَيِّز سالباً؟" },
+  { who: "T", dur: 5.4, text: "عندها لا يوجد حلٌّ حقيقي. وإن كان المُمَيِّز صفراً، فللمعادلة جذرٌ واحدٌ مُكَرَّر." },
+  { who: "S", dur: 2.6, text: "فهمتُ الآن! شكراً لك يا أستاذ." },
+  { who: "T", dur: 5.8, text: "العفو! تذكّروا: الرياضيات تُفهَم بالتدريب. بالتوفيق لكم في امتحانات عام ألفين وخمسة وعشرين!" },
+];
+let tt0 = INTRO;
+LINES.forEach(l => { l.start = tt0; tt0 += l.dur + GAP; });
+const DURATION = tt0 + OUTRO;
+const lineAt = t => LINES.findIndex(l => t >= l.start && t < l.start + l.dur + GAP);
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOut = k => 1 - Math.pow(1 - k, 3);
+const eBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const font = (w, s) => `${w} ${s}px Cairo`;
+const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); };
+
+function text(str, x, y, o = {}) {
+  ctx.save();
+  ctx.direction = o.dir || "rtl";
+  ctx.font = o.font || font(700, 50);
+  ctx.textAlign = o.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.globalAlpha *= o.alpha ?? 1;
+  if (o.shadow) { ctx.shadowColor = o.shadow; ctx.shadowBlur = o.blur ?? 24; }
+  ctx.fillStyle = o.color || C.chalk;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// ---------- background ----------
+function background(t) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, C.bg2); g.addColorStop(1, C.bg);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // floating math symbols
+  ctx.save();
+  ctx.font = font(700, 70); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ["+", "−", "×", "÷", "=", "√", "π", "∆", "x²", "±"].forEach((s, i) => {
+    const x = (i * 211 + 90) % W, y = 80 + ((i * 137) % 900) + Math.sin(t * 0.6 + i) * 18;
+    ctx.globalAlpha = 0.06; ctx.fillStyle = "#fff";
+    ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(t * 0.4 + i) * 0.2); ctx.fillText(s, 0, 0); ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ---------- characters ----------
+function mouth(x, y, talking, t) {
+  ctx.fillStyle = "#7A2E2E";
+  const open = talking ? 5 + 9 * Math.abs(Math.sin(t * 13)) : 3;
+  ctx.beginPath(); ctx.ellipse(x, y, 13, open, 0, 0, Math.PI * 2); ctx.fill();
+}
+function eyes(x, y, t, gap = 34) {
+  const blink = (t % 3.4) > 3.28 ? 0.15 : 1;
+  ctx.fillStyle = "#1B1B1B";
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + s * gap / 2, y, 7, 9 * blink, 0, 0, Math.PI * 2); ctx.fill(); }
+}
+function teacher(cx, base, talking, t) {
+  const bob = Math.sin(t * 2) * 4 + (talking ? Math.sin(t * 9) * 3 : 0);
+  ctx.save(); ctx.translate(cx, base + bob);
+  // body: shirt + blazer
+  ctx.fillStyle = "#2E3A59"; rr(-120, -300, 240, 300, 60); ctx.fill();
+  ctx.fillStyle = "#F4F4F4"; ctx.beginPath(); ctx.moveTo(-34, -300); ctx.lineTo(34, -300); ctx.lineTo(0, -210); ctx.fill();
+  ctx.fillStyle = "#C0392B"; ctx.beginPath(); ctx.moveTo(-9, -285); ctx.lineTo(9, -285); ctx.lineTo(13, -225); ctx.lineTo(0, -205); ctx.lineTo(-13, -225); ctx.fill();
+  // head
+  ctx.fillStyle = "#E7B58D"; ctx.beginPath(); ctx.arc(0, -390, 88, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#2B1D14"; ctx.beginPath(); ctx.arc(0, -420, 88, Math.PI, 0); ctx.fill();
+  // glasses
+  ctx.strokeStyle = "#222"; ctx.lineWidth = 6;
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * 30, -392, 24, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(-6, -392); ctx.lineTo(6, -392); ctx.stroke();
+  eyes(0, -392, t, 60); mouth(0, -345, talking, t);
+  // pointer arm
+  ctx.strokeStyle = "#2E3A59"; ctx.lineWidth = 34; ctx.lineCap = "round";
+  const sw = talking ? Math.sin(t * 3) * 0.12 : 0;
+  ctx.beginPath(); ctx.moveTo(-100, -250); ctx.lineTo(-175, -330 + sw * 120); ctx.stroke();
+  ctx.strokeStyle = C.yellow; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.moveTo(-175, -330 + sw * 120); ctx.lineTo(-250, -430 + sw * 120); ctx.stroke();
+  ctx.restore();
+}
+function student(cx, base, talking, t) {
+  const bob = Math.sin(t * 2 + 1) * 4 + (talking ? Math.sin(t * 9) * 3 : 0);
+  ctx.save(); ctx.translate(cx, base + bob);
+  ctx.fillStyle = "#6C4AB6"; rr(-110, -280, 220, 280, 56); ctx.fill();
+  // headscarf + face
+  ctx.fillStyle = "#F0F0F7"; ctx.beginPath(); ctx.arc(0, -380, 100, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#E9BE98"; ctx.beginPath(); ctx.ellipse(0, -378, 70, 78, 0, 0, Math.PI * 2); ctx.fill();
+  eyes(0, -388, t, 56); mouth(0, -342, talking, t);
+  // raised hand when asking
+  if (talking) {
+    ctx.strokeStyle = "#6C4AB6"; ctx.lineWidth = 32; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(100, -230); ctx.lineTo(150, -330 + Math.sin(t * 6) * 8); ctx.stroke();
+    ctx.fillStyle = "#E9BE98"; ctx.beginPath(); ctx.arc(150, -345 + Math.sin(t * 6) * 8, 22, 0, Math.PI * 2); ctx.fill();
+  }
+  // book
+  ctx.fillStyle = "#FFD54A"; rr(-60, -150, 120, 80, 8); ctx.fill();
+  ctx.fillStyle = "#C79A12"; ctx.fillRect(-4, -150, 8, 80);
+  ctx.restore();
+}
+
+// ---------- blackboard ----------
+const BX = 450, BY = 120, BW = 1020, BH = 640;
+function board() {
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.45)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14;
+  ctx.fillStyle = C.boardEdge; rr(BX - 22, BY - 22, BW + 44, BH + 44, 26); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = C.board; rr(BX, BY, BW, BH, 12); ctx.fill();
+  // chalk tray
+  ctx.fillStyle = "#6E431D"; rr(BX + 40, BY + BH + 22, BW - 80, 16, 8); ctx.fill();
+}
+const ROW0 = BY + 100, ROWH = 58;
+// Arabic math is laid out left-to-right: every item is a list of tokens placed in visual order,
+// so the canvas bidi algorithm never reorders Arabic letters and digits.
+// a token may glue parts with "~" (e.g. "س~²", "5~س"): parts are drawn adjacent, left to right.
+// "²" is drawn as a small raised glyph so Arabic letters never reorder around it.
+const parts = tk => tk.split("~");
+const partFont = (pt, size) => font(700, pt === "²" ? size * 0.62 : size);
+function tokenWidth(tk, size) {
+  ctx.direction = "ltr";
+  return parts(tk).reduce((a, pt) => { ctx.font = partFont(pt, size); return a + ctx.measureText(pt).width; }, 0);
+}
+function tokensWidth(tokens, size) {
+  return tokens.reduce((a, tk) => a + tokenWidth(tk, size), 0) + size * 0.3 * (tokens.length - 1);
+}
+function mathLine(tokens, x, y, size, color, anchor = "center") {
+  const gap = size * 0.3, w = tokensWidth(tokens, size);
+  let cx = anchor === "center" ? x - w / 2 : anchor === "left" ? x : x - w;
+  tokens.forEach(tk => {
+    parts(tk).forEach(pt => {
+      ctx.save(); ctx.font = partFont(pt, size); ctx.direction = "ltr"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = color;
+      ctx.fillText(pt, cx, pt === "²" ? y - size * 0.28 : y); cx += ctx.measureText(pt).width; ctx.restore();
+    });
+    cx += gap;
+  });
+  return w;
+}
+function fraction(num, den, x, y, size, color) {
+  const w = Math.max(tokensWidth(num, size), tokensWidth(den, size)) + 24;
+  mathLine(num, x, y - size * 0.62, size, color);
+  mathLine(den, x, y + size * 0.62, size, color);
+  ctx.fillStyle = color; ctx.fillRect(x - w / 2, y - 2, w, 4);
+  return w;
+}
+const ITEMS = [
+  { line: 2, row: 0, color: C.yellow, size: 52, tk: ["أ", "س~²", "+", "ب", "س", "+", "جـ", "=", "0"], note: "الصورة العامة" },
+  { line: 3, row: 1, color: C.chalk, size: 48, tk: ["س~²", "−", "5~س", "+", "6", "=", "0"], note: "مثال" },
+  { line: 4, row: 2, color: C.cyan, size: 44, tk: ["أ", "=", "1", "،", "ب", "=", "−5", "،", "جـ", "=", "6"] },
+  { line: 5, row: 3, color: C.pink, size: 48, tk: ["∆", "=", "ب~²", "−", "4", "أ", "جـ"], note: "المُمَيِّز" },
+  { line: 6, row: 4, color: C.pink, size: 42, tk: ["∆", "=", "(−5)~²", "−", "4", "×", "1", "×", "6", "=", "25", "−", "24", "=", "1"] },
+  { line: 7, row: 5, extra: 22, color: C.green, size: 40, formula: true, note: "القانون العام" },
+  { line: 7, row: 6, extra: 44, delay: 3.2, color: C.green, size: 42, tk: ["∆", ">", "0", "⟹"], ar: "جذران حقيقيان مختلفان" },
+  { line: 8, row: 7, extra: 44, color: C.orange, size: 42, tk: ["س", "=", "(5", "±", "1)", "÷", "2", "⟹", "س", "=", "3", "،", "س", "=", "2"] },
+  { line: 9, row: 8, extra: 44, color: C.yellow, size: 40, tk: ["3~²", "−", "5", "×", "3", "+", "6", "=", "9", "−", "15", "+", "6", "=", "0", "✓"], note: "تحقّق" },
+];
+function boardContent(t) {
+  const idx = lineAt(t);
+  const cur = idx < 0 ? (t < INTRO ? -1 : LINES.length) : idx;
+  const fadeOut = cur >= 10 ? prog(t, LINES[10].start, 0.6) : 0; // board clears for the summary
+  ctx.save();
+  ctx.globalAlpha = 1 - fadeOut;
+  ITEMS.forEach(it => {
+    const s = LINES[it.line].start + (it.delay || 0) + 0.4;
+    const k = prog(t, s, 0.9);
+    if (k <= 0) return;
+    const y = ROW0 + it.row * ROWH + (it.extra || 0), cx = BX + BW / 2;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(BX + 20, y - 50, (BW - 40) * eOut(k), 100); ctx.clip(); // chalk write-on wipe
+    if (it.formula) {
+      const fw = fraction(["−ب", "±", "√∆"], ["2", "أ"], cx + 40, y, it.size, it.color);
+      mathLine(["س", "="], cx + 40 - fw / 2 - 20, y, 48, it.color, "right");
+    } else if (it.ar) {
+      mathLine(it.tk, cx - 10, y, it.size, it.color, "right");
+      text(it.ar, cx + 10, y, { font: font(700, it.size), color: it.color, align: "left" });
+    } else {
+      mathLine(it.tk, cx, y, it.size, it.color);
+    }
+    ctx.restore();
+    if (it.note) text(it.note, BX + BW - 36, y, { font: font(400, 24), color: C.muted, align: "right", alpha: k });
+  });
+  ctx.restore();
+  // summary cards
+  const k = prog(t, LINES[10].start + 0.5, 0.8);
+  if (k > 0 && cur <= LINES.length) {
+    const cards = [
+      { h: "∆ > 0", b: "جذران مختلفان", c: C.green },
+      { h: "∆ = 0", b: "جذر واحد مكرر", c: C.yellow },
+      { h: "∆ < 0", b: "لا يوجد حل حقيقي", c: C.pink },
+    ];
+    cards.forEach((cd, i) => {
+      const kk = clamp(k * 1.6 - i * 0.3), x = BX + 40 + i * 320, y = BY + 150;
+      if (kk <= 0) return;
+      ctx.save(); ctx.globalAlpha = kk; ctx.translate(x + 140, y + 160); ctx.scale(eBack(kk), eBack(kk));
+      ctx.fillStyle = "rgba(255,255,255,0.07)"; rr(-140, -160, 280, 320, 24); ctx.fill();
+      ctx.strokeStyle = cd.c; ctx.lineWidth = 4; rr(-140, -160, 280, 320, 24); ctx.stroke();
+      text(cd.h, 0, -70, { font: font(900, 78), color: cd.c, dir: "ltr" });
+      text(cd.b, 0, 50, { font: font(700, 36), color: C.chalk });
+      ctx.restore();
+    });
+    text("المُمَيِّز يحدّد عدد الحلول", BX + BW / 2, BY + 70, { font: font(900, 50), color: C.yellow, alpha: k });
+  }
+}
+
+// ---------- subtitles ----------
+function wrap(str, maxW, f) {
+  ctx.font = f; ctx.direction = "rtl";
+  const words = str.split(" "), lines = []; let cur = "";
+  for (const w of words) {
+    const test = cur ? cur + " " + w : w;
+    if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; } else cur = test;
+  }
+  lines.push(cur); return lines;
+}
+function subtitle(t) {
+  const i = lineAt(t); if (i < 0) return;
+  const L = LINES[i], k = prog(t, L.start, 0.25), out = 1 - prog(t, L.start + L.dur, 0.2);
+  const a = Math.min(k, out);
+  if (a <= 0) return;
+  const f = font(700, 44), rows = wrap(L.text, 1280, f);
+  const bh = 50 + rows.length * 66, y0 = 930 - bh / 2 + (1 - eOut(k)) * 20;
+  const col = L.who === "T" ? C.yellow : C.cyan;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = "rgba(6,18,32,0.82)"; rr(CX - 700, y0, 1400, bh, 28); ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 3; rr(CX - 700, y0, 1400, bh, 28); ctx.stroke();
+  // speaker tag
+  ctx.fillStyle = col; rr(CX + 700 - 190, y0 - 26, 190, 52, 26); ctx.fill();
+  text(L.who === "T" ? "الأستاذ" : "الطالبة", CX + 700 - 95, y0, { font: font(900, 30), color: "#0B1B2E" });
+  rows.forEach((r, j) => text(r, CX, y0 + 42 + 33 + j * 66, { font: f, color: C.chalk }));
+  ctx.restore();
+}
+
+// ---------- intro / outro ----------
+function intro(t) {
+  if (t > INTRO + 0.6) return;
+  const k = prog(t, 0.2, 0.9), out = prog(t, INTRO - 0.5, 0.6);
+  ctx.save(); ctx.globalAlpha = 1 - out;
+  ctx.fillStyle = "rgba(14,42,71,0.94)"; ctx.fillRect(0, 0, W, H);
+  ctx.translate(0, (1 - eOut(k)) * 40); ctx.globalAlpha *= k;
+  text("الرياضيات · الثالث المتوسط", CX, 340, { font: font(700, 46), color: C.muted });
+  text("المعادلة التربيعية", CX, 470, { font: font(900, 130), color: C.chalk, shadow: C.cyan, blur: 40 });
+  text("الحل بالقانون العام", CX, 620, { font: font(700, 70), color: C.yellow });
+  text("حوار بين المعلّم والطالبة · منهج 2025", CX, 740, { font: font(400, 38), color: C.muted });
+  ctx.save(); ctx.globalAlpha *= 0.8; mathLine(["أ", "س~²", "+", "ب", "س", "+", "جـ", "=", "0"], CX, 860, 56, C.cyan); ctx.restore();
+  ctx.restore();
+}
+function outro(t) {
+  const s = LINES[LINES.length - 1].start + LINES[LINES.length - 1].dur + GAP;
+  const k = prog(t, s, 0.8); if (k <= 0) return;
+  ctx.save(); ctx.globalAlpha = k;
+  ctx.fillStyle = "rgba(14,42,71,0.95)"; ctx.fillRect(0, 0, W, H);
+  ctx.translate(0, (1 - eOut(k)) * 30);
+  text("تذكّر الخطوات", CX, 230, { font: font(900, 80), color: C.yellow });
+  [["١", "حدّد أ ، ب ، جـ", C.cyan], ["٢", "احسب المُمَيِّز ∆", C.pink], ["٣", "عوّض في القانون العام", C.green], ["٤", "تحقّق من الحلّين", C.orange]]
+    .forEach(([n, s2, c], i) => {
+      const kk = clamp(k * 2.2 - i * 0.35), y = 400 + i * 120;
+      ctx.save(); ctx.globalAlpha *= kk; ctx.translate((1 - eOut(kk)) * 60, 0);
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(CX + 380, y, 40, 0, Math.PI * 2); ctx.fill();
+      text(n, CX + 380, y + 2, { font: font(900, 46), color: "#0B1B2E" });
+      text(s2, CX + 320, y, { font: font(700, 54), color: C.chalk, align: "right" });
+      ctx.restore();
+    });
+  text("بالتوفيق في امتحانات 2025", CX, 940, { font: font(700, 48), color: C.muted });
+  ctx.restore();
+}
+
+// ---------- frame ----------
+function render(t) {
+  ctx.save();
+  background(t);
+  const i = lineAt(t);
+  const talkT = i >= 0 && t > LINES[i].start + 0.15 && t < LINES[i].start + LINES[i].dur - 0.2;
+  board(); boardContent(t);
+  teacher(1680, 880, talkT && LINES[i].who === "T", t);
+  student(250, 880, talkT && LINES[i].who === "S", t);
+  subtitle(t);
+  outro(t); intro(t);
+  const f = Math.max(1 - prog(t, 0, 0.3), prog(t, DURATION - 0.8, 0.8));
+  if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
+window.DURATION = DURATION;
+window.LINES = LINES;
+window.render = render;
+window.ready = Promise.all([400, 700, 900].flatMap(w => [
+  document.fonts.load(`${w} 50px Cairo`, "المعادلة التربيعية"),
+  document.fonts.load(`${w} 50px Cairo`, "x² = 0 ∆ √ ± ÷ ×"),
+])).then(() => true);
+
+if (!navigator.webdriver) {
+  const t0 = performance.now();
+  window.ready.then(() => {
+    const loop = now => { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>

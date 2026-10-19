@@ -38,7 +38,12 @@
     "ramadan-clasico:audio": "python3 ramadan-clasico/soundtrack.py",
     "ramadan-clasico:render": "node scripts/render.mjs --src ramadan-clasico/motion.html --audio output/ramadan-clasico-soundtrack.wav --out output/ramadan-clasico.mp4",
     "jenna:preview": "node scripts/render.mjs --src src/abu-jenna.html --preview --times 6.5,8.5,9.5,12.5,14,15.5,16.5,18,20.5",
-    "jenna:render": "node scripts/render.mjs --src src/abu-jenna.html --audio output/none.wav --out output/abu-jenna.mp4"
+    "jenna:render": "node scripts/render.mjs --src src/abu-jenna.html --audio output/none.wav --out output/abu-jenna.mp4",
+    "abu-janna:audio": "python3 abu-janna/soundtrack.py",
+    "abu-janna:render": "node scripts/render.mjs --src abu-janna/motion.html --audio output/abu-janna-soundtrack.wav --out output/abu-janna.mp4",
+    "iphone15:audio": "python3 scripts/iphone15_soundtrack.py",
+    "iphone15:preview": "node scripts/render.mjs --src src/iphone15.html --preview --times 2.5,5.6,9.5,13,16.4,20.8",
+    "iphone15:render": "node scripts/render.mjs --src src/iphone15.html --audio output/iphone15-soundtrack.wav --out output/iphone15.mp4"
   },
   "devDependencies": {
     "playwright": "1.56.1"
