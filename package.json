@@ -45,7 +45,9 @@
     "iphone15:preview": "node scripts/render.mjs --src src/iphone15.html --preview --times 2.5,5.6,9.5,13,16.4,20.8",
     "iphone15:render": "node scripts/render.mjs --src src/iphone15.html --audio output/iphone15-soundtrack.wav --out output/iphone15.mp4",
     "count:preview": "node scripts/render.mjs --src src/count.html --preview --times 0.3,10.2,30.4,59",
-    "count:render": "node scripts/render.mjs --src src/count.html --audio none --out output/count-0-100.mp4"
+    "count:render": "node scripts/render.mjs --src src/count.html --audio none --out output/count-0-100.mp4",
+    "tts": "python3 scripts/gemini_tts.py",
+    "abu-janna:vo": "python3 scripts/gemini_tts.py --script abu-janna/vo-script.txt --out output/abu-janna-vo.wav --voice Puck --style \"اقرأ بلهجة عراقية، بحماس وطاقة إعلانية\""
   },
   "devDependencies": {
     "playwright": "1.56.1"
