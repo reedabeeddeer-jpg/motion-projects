@@ -340,3 +340,14 @@ npm run ramadan-clasico:render   # output/ramadan-clasico.mp4
 ## ramadan-clasico-remotion — النسخة الحماسية (Remotion)
 
 نسخة موسّعة من «كلاسيكو رمضان × Signal» في Remotion: 36.5 ثانية بتعليق صوتي رجالي حماسي (ElevenLabs) وموسيقى ومؤثرات تنخفض تحت الصوت، وخمسة مشاهد مع اصطدام الشعارين وشريط «مباشر» وعدّاد 10X وانتقالات Light Leak. التفاصيل في `ramadan-clasico-remotion/README.md`، والفيديو في `output/ramadan-clasico-remotion.mp4`.
+
+## abu-janna — إعلان أبو جنة فور يو (25 ثانية)
+
+إعلان موشن لمشروب FOR YOU ENERGY (1920×1080، 30fps، 25 ثانية): نزول العلبة → أرقام 1–10 وسيارة تاهو → «جنة» وآيفون 17 → «أبو جنة» → لقطة ختامية. العلبة من الصورة المرفقة دون تعديل (`abu-janna/assets/can.png`)، والسيارة والهاتف رسومات عامة بلا شعارات.
+
+```bash
+npm run abu-janna:audio    # موسيقى ومؤثرات فقط
+npm run abu-janna:render   # output/abu-janna.mp4
+```
+
+التعليق الصوتي العراقي غير مضمّن: رصيد ElevenLabs نفد وPollo لا يوفّر صوتاً عربياً. النصوص الخمسة جاهزة في `abu-janna/vo-script.txt`.
