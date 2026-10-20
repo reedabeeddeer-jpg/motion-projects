@@ -1,6 +1,7 @@
 import React from "react";
 import { Composition, Folder } from "remotion";
 import { FlatDesign } from "./FlatDesign";
+import { Grocery } from "./grocery/Grocery";
 import { DesignScene } from "./scenes/DesignScene";
 import { EndScene } from "./scenes/EndScene";
 import { IdeaScene } from "./scenes/IdeaScene";
@@ -18,6 +19,7 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="End" component={EndScene} width={WIDTH} height={HEIGHT} fps={FPS} durationInFrames={SCENES.end} />
       </Folder>
       <Composition id="FlatDesign" component={FlatDesign} width={WIDTH} height={HEIGHT} fps={FPS} durationInFrames={TOTAL_FRAMES} />
+      <Composition id="Grocery" component={Grocery} width={WIDTH} height={HEIGHT} fps={FPS} durationInFrames={TOTAL_FRAMES} />
     </>
   );
 };
