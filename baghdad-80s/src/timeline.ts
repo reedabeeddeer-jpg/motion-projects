@@ -27,3 +27,14 @@ export const PALETTE = {
   brown: "#7a4a2a",
   orange: "#ef8a3c",
 };
+
+// Baghdadi-dialect voice-over, one line per scene (seconds = where it starts).
+// Put the generated files at public/audio/vo/l1.wav … l5.wav, then set VO_READY = true.
+export const VO_READY = false;
+export const VO_LINES = [
+  { id: "l1", at: 0.4, text: "هاي بغداد… أيام الثمانينات." },
+  { id: "l2", at: 3.5, text: "شارع الرشيد، والباص الأحمر أبو الطابقين." },
+  { id: "l3", at: 6.9, text: "وأبو نؤاس على دجلة… سمچ مسگوف وچاي." },
+  { id: "l4", at: 10.3, text: "زمن الكاسيت والتلفزيون، وسهرات الأهل." },
+  { id: "l5", at: 13.2, text: "بغداد… ذكريات ما تنتسى." },
+] as const;
