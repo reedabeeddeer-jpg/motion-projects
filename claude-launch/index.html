@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="ar">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=2560, height=1440" />
+    <title>Claude Opus 5.5 Launch</title>
+    <script src="vendor/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Inter Display"; font-weight: 300; src: url(fonts/InterDisplay-Light.otf) format("opentype"); }
+      @font-face { font-family: "Inter Display"; font-weight: 600; src: url(fonts/InterDisplay-SemiBold.otf) format("opentype"); }
+      @font-face { font-family: "Inter"; font-weight: 500; src: url(fonts/Inter-Medium.otf) format("opentype"); }
+      @font-face { font-family: "Code Mono"; font-weight: 400; src: url(fonts/DejaVuSansMono.ttf) format("truetype"); }
+      @font-face { font-family: "Cairo"; font-weight: 400; src: url(fonts/cairo-arabic-400-normal.woff2) format("woff2"); }
+      @font-face { font-family: "Cairo"; font-weight: 700; src: url(fonts/cairo-arabic-700-normal.woff2) format("woff2"); }
+      @font-face { font-family: "Cairo"; font-weight: 900; src: url(fonts/cairo-arabic-900-normal.woff2) format("woff2"); }
+
+      :root {
+        --ink: #0b0a09;
+        --cream: #f2ebe1;
+        --muted: #a39686;
+        --clay: #d97757;
+        --clay-hi: #f0a483;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 2560px; height: 1440px; overflow: hidden; background: var(--ink); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--ink); color: var(--cream); }
+
+      /* shared full-bleed layers (not clips) */
+      .layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+      #field { display: block; }
+      #grain { display: block; opacity: 0.07; mix-blend-mode: screen; }
+      #vignette { background: radial-gradient(ellipse 75% 70% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.78) 100%); }
+      #flash { background: radial-gradient(circle at 50% 50%, #fff6ee 0%, #f3b897 45%, rgba(217,119,87,0) 80%); opacity: 0; mix-blend-mode: screen; }
+      #fade { background: #000; opacity: 0; }
+      .bar { position: absolute; left: 0; width: 100%; height: 150px; background: #000; }
+      #bar-top { top: 0; }
+      #bar-bot { bottom: 0; }
+
+      .clip { position: absolute; inset: 0; }
+      .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+      .ar { font-family: "Cairo", sans-serif; direction: rtl; }
+      .kicker { font-family: "Inter", sans-serif; font-weight: 500; letter-spacing: 0.42em; margin-right: -0.42em; text-transform: uppercase; color: var(--muted); font-size: 34px; }
+
+      /* S1 */
+      #s1-a { font-weight: 400; font-size: 120px; color: var(--cream); line-height: 1.25; }
+      #s1-b { font-weight: 900; font-size: 168px; color: var(--cream); line-height: 1.25; }
+      #s1-b span { color: var(--clay-hi); }
+
+      /* S2 */
+      #s2-mark { width: 760px; height: 760px; display: block; overflow: visible; }
+      #s2-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+      #s2-cap { position: absolute; left: 0; right: 0; bottom: 240px; text-align: center; font-weight: 700; font-size: 92px; }
+      #s2-cap b { color: var(--clay-hi); font-family: "Inter Display", sans-serif; font-weight: 600; }
+
+      /* S3 beats */
+      .beat { position: absolute; inset: 0; display: flex; flex-direction: row; align-items: center; padding: 0 200px; gap: 110px; }
+      .beat-vis { flex: 0 0 960px; height: 820px; position: relative; }
+      .beat-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 30px; }
+      .beat-word { font-family: "Cairo", sans-serif; direction: rtl; font-weight: 900; font-size: 150px; line-height: 1.15; color: var(--cream); white-space: nowrap; }
+      #b3-word { font-size: 128px; }
+      .beat-rule { width: 520px; height: 6px; background: linear-gradient(90deg, rgba(217,119,87,0), var(--clay)); display: block; }
+      .beat-sub { font-family: "Cairo", sans-serif; direction: rtl; font-weight: 400; font-size: 58px; color: var(--muted); }
+      .vis-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+
+      .code { position: absolute; inset: 60px 0 60px 0; border-radius: 36px; background: rgba(30, 25, 22, 0.78); border: 2px solid rgba(242, 235, 225, 0.12); padding: 120px 80px 60px; font-family: "Code Mono", monospace; font-size: 38px; line-height: 1.75; color: var(--cream); overflow: hidden; box-shadow: 0 60px 120px rgba(0,0,0,0.55); direction: ltr; }
+      .dots { position: absolute; top: 44px; left: 56px; display: flex; gap: 22px; }
+      .dots i { width: 24px; height: 24px; border-radius: 50%; display: block; background: #3b332d; }
+      .dots i:first-child { background: var(--clay); }
+      .ln { display: block; white-space: pre; }
+      .k { color: var(--clay-hi); }
+      .s { color: #bfd8a8; }
+      .c { color: #7d7166; }
+
+      .tiles { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); gap: 34px; padding: 60px 20px; }
+      .tile { border-radius: 26px; background: rgba(40, 33, 29, 0.85); border: 2px solid rgba(242, 235, 225, 0.1); position: relative; overflow: hidden; }
+      .tile svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .tile.hero { border-color: var(--clay); box-shadow: 0 0 80px rgba(217,119,87,0.45); }
+
+      /* S4 */
+      #s4-stage { perspective: 2200px; }
+      #s4-kick { font-size: 56px; letter-spacing: 0.6em; color: var(--clay-hi); margin-bottom: 10px; }
+      #s4-num { font-family: "Inter Display", sans-serif; font-weight: 600; font-size: 720px; line-height: 0.9; letter-spacing: -0.04em; display: block;
+        background-image: linear-gradient(100deg, #f2ebe1 0%, #f2ebe1 38%, #fff 46%, #f6b18f 50%, #fff 54%, #f2ebe1 62%, #d9cdbd 100%);
+        background-size: 300% 100%; background-position: 100% 0; -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+      /* S5 lockup */
+      #s5-row { display: flex; flex-direction: row; align-items: center; gap: 70px; direction: ltr; }
+      #s5-mark { width: 300px; height: 300px; display: block; overflow: visible; }
+      #s5-word { font-family: "Inter Display", sans-serif; font-weight: 600; font-size: 280px; letter-spacing: -0.035em; color: var(--cream); display: flex; line-height: 1; }
+      #s5-word span { display: inline-block; }
+      #s5-opus { font-family: "Inter Display", sans-serif; font-weight: 300; font-size: 150px; letter-spacing: 0.02em; color: var(--clay-hi); margin-top: 30px; direction: ltr; display: block; }
+      #s5-tag { font-weight: 700; font-size: 76px; color: var(--cream); margin-top: 60px; display: block; }
+      #s5-pill { margin-top: 56px; padding: 18px 64px 24px; border-radius: 999px; border: 3px solid var(--clay); font-weight: 700; font-size: 52px; color: var(--clay-hi); display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="18" data-width="2560" data-height="1440">
+      <!-- procedural particle field, light rays and core glow -->
+      <canvas id="field" class="layer" width="2560" height="1440"></canvas>
+
+      <!-- S1: cold open -->
+      <section id="s1" class="clip" data-start="0" data-duration="3.05" data-track-index="1">
+        <div class="center ar">
+          <div id="s1-a">كل فكرة عظيمة</div>
+          <div id="s1-b">تبدأ <span>بسؤال</span></div>
+        </div>
+      </section>
+
+      <!-- S2: the mark is born -->
+      <section id="s2" class="clip" data-start="3" data-duration="3.45" data-track-index="1">
+        <div class="center"><div id="s2-cam"><svg id="s2-mark" viewBox="-100 -100 200 200"></svg></div></div>
+        <svg id="s2-ring" viewBox="0 0 2560 1440"></svg>
+        <div id="s2-cap" class="ar">الجيل الجديد من <b>Claude</b></div>
+      </section>
+
+      <!-- S3: three capability beats -->
+      <section id="s3a" class="clip" data-start="6.4" data-duration="1.36" data-track-index="1">
+        <div class="beat" id="b1">
+          <div class="beat-vis" id="b1-vis"><svg class="vis-svg" id="b1-net" viewBox="0 0 1180 900"></svg></div>
+          <div class="beat-txt">
+            <div class="kicker">Reasoning</div>
+            <div class="beat-word" id="b1-word">يفكّر بعمق</div>
+            <i class="beat-rule" id="b1-rule"></i>
+            <div class="beat-sub" id="b1-sub">يربط الأفكار خطوةً بخطوة</div>
+          </div>
+        </div>
+      </section>
+      <section id="s3b" class="clip" data-start="7.73" data-duration="1.36" data-track-index="1">
+        <div class="beat" id="b2">
+          <div class="beat-vis" id="b2-vis">
+            <div class="code" id="b2-code">
+              <div class="dots"><i></i><i></i><i></i></div>
+              <span class="ln"><span class="k">async function</span> launch(model) {</span>
+              <span class="ln">  <span class="k">const</span> mind = <span class="k">await</span> model.think();</span>
+              <span class="ln">  <span class="k">for</span> (<span class="k">const</span> idea <span class="k">of</span> mind.ideas) {</span>
+              <span class="ln">    build(idea).test().ship();</span>
+              <span class="ln">  }</span>
+              <span class="ln">  <span class="c">// every pixel here is code</span></span>
+              <span class="ln">  <span class="k">return</span> <span class="s">"Opus 5.5"</span>;</span>
+              <span class="ln">}</span>
+            </div>
+          </div>
+          <div class="beat-txt">
+            <div class="kicker">Code</div>
+            <div class="beat-word" id="b2-word">يبرمج بإتقان</div>
+            <i class="beat-rule" id="b2-rule"></i>
+            <div class="beat-sub" id="b2-sub">من الفكرة إلى منتجٍ يعمل</div>
+          </div>
+        </div>
+      </section>
+      <section id="s3c" class="clip" data-start="9.07" data-duration="1.4" data-track-index="1">
+        <div class="beat" id="b3">
+          <div class="beat-vis" id="b3-vis"><div class="tiles" id="b3-tiles"></div></div>
+          <div class="beat-txt">
+            <div class="kicker">Vision</div>
+            <div class="beat-word" id="b3-word">يرى الصورة كاملة</div>
+            <i class="beat-rule" id="b3-rule"></i>
+            <div class="beat-sub" id="b3-sub">سياقٌ أوسع، فهمٌ أعمق</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S4: the number -->
+      <section id="s4" class="clip" data-start="10.4" data-duration="3.25" data-track-index="1">
+        <div class="center" id="s4-stage">
+          <div class="kicker" id="s4-kick">Opus</div>
+          <div id="s4-num" data-layout-allow-occlusion>5.5</div>
+        </div>
+      </section>
+
+      <!-- S5: lockup -->
+      <section id="s5" class="clip" data-start="13.6" data-duration="4.4" data-track-index="1">
+        <div class="center" id="s5-cam">
+          <div id="s5-row">
+            <svg id="s5-mark" viewBox="-100 -100 200 200"></svg>
+            <div id="s5-word"><span data-layout-allow-occlusion>C</span><span data-layout-allow-occlusion>l</span><span data-layout-allow-occlusion>a</span><span data-layout-allow-occlusion>u</span><span data-layout-allow-occlusion>d</span><span data-layout-allow-occlusion>e</span></div>
+          </div>
+          <div id="s5-opus" data-layout-allow-occlusion>Opus 5.5</div>
+          <div id="s5-tag" class="ar">ذكاءٌ يرتقي بكل ما تصنعه</div>
+          <div id="s5-pill" class="ar">متاح الآن</div>
+        </div>
+      </section>
+
+      <!-- synthesized score (score.py) -->
+      <audio id="score" src="audio/score.wav" data-start="0" data-duration="18" data-track-index="5"></audio>
+
+      <!-- finishing layers -->
+      <div id="flash" class="layer" data-layout-allow-occlusion></div>
+      <canvas id="grain" class="layer" data-layout-allow-occlusion width="640" height="360"></canvas>
+      <div id="vignette" class="layer" data-layout-allow-occlusion></div>
+      <div id="bar-top" class="bar"></div>
+      <div id="bar-bot" class="bar"></div>
+      <div id="fade" class="layer" data-layout-allow-occlusion></div>
+    </div>
+
+    <script>
+      (function () {
+        var W = 2560, H = 1440, CX = W / 2, CY = H / 2, DUR = 18;
+        var SVGNS = "http://www.w3.org/2000/svg";
+
+        // ---------- deterministic helpers ----------
+        function hash(i, s) {
+          var n = (Math.imul(i + 1, 374761393) + Math.imul(s + 7, 668265263)) | 0;
+          n = Math.imul(n ^ (n >>> 13), 1274126177);
+          n ^= n >>> 16;
+          return (n >>> 0) / 4294967295;
+        }
+        function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+        function prog(t, s, d) { return clamp((t - s) / d, 0, 1); }
+        function lerp(a, b, k) { return a + (b - a) * k; }
+        function inCubic(k) { return k * k * k; }
+        function outCubic(k) { return 1 - Math.pow(1 - k, 3); }
+        function inOutCubic(k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }
+        function outExpo(k) { return k >= 1 ? 1 : 1 - Math.pow(2, -10 * k); }
+        function bump(t, a, b, c, d) { return prog(t, a, b - a) * (1 - prog(t, c, d - c)); }
+
+        // ---------- the mark: capsule rays generated in code ----------
+        function buildMark(svg, prefix) {
+          var rays = [];
+          var count = 12;
+          for (var i = 0; i < count; i++) {
+            var ang = i * (360 / count) + (hash(i, 11) - 0.5) * 9;
+            var len = 70 + hash(i, 12) * 24;
+            var w = 12 + hash(i, 13) * 5;
+            var g = document.createElementNS(SVGNS, "g");
+            g.setAttribute("transform", "rotate(" + ang.toFixed(2) + ")");
+            var r = document.createElementNS(SVGNS, "rect");
+            r.setAttribute("x", (-w / 2).toFixed(2));
+            r.setAttribute("y", (-len).toFixed(2));
+            r.setAttribute("width", w.toFixed(2));
+            r.setAttribute("height", len.toFixed(2));
+            r.setAttribute("rx", (w / 2).toFixed(2));
+            r.setAttribute("fill", "#d97757");
+            r.setAttribute("class", prefix + "-ray");
+            g.appendChild(r);
+            svg.appendChild(g);
+            rays.push(r);
+          }
+          var core = document.createElementNS(SVGNS, "circle");
+          core.setAttribute("r", "17");
+          core.setAttribute("fill", "#d97757");
+          svg.appendChild(core);
+          return { rays: rays, core: core };
+        }
+        var mark2 = buildMark(document.getElementById("s2-mark"), "m2");
+        var mark5 = buildMark(document.getElementById("s5-mark"), "m5");
+
+        // shockwave rings for S2
+        var ringSvg = document.getElementById("s2-ring");
+        var rings = [];
+        for (var ri = 0; ri < 3; ri++) {
+          var c = document.createElementNS(SVGNS, "circle");
+          c.setAttribute("cx", CX); c.setAttribute("cy", CY); c.setAttribute("r", "300");
+          c.setAttribute("fill", "none"); c.setAttribute("stroke", ri === 0 ? "#fff1e6" : "#d97757");
+          c.setAttribute("stroke-width", ri === 0 ? "6" : "3");
+          ringSvg.appendChild(c); rings.push(c);
+        }
+
+        // ---------- beat 1: reasoning network ----------
+        var net = document.getElementById("b1-net");
+        var nodes = [];
+        for (var ni = 0; ni < 16; ni++) {
+          var ring = ni === 0 ? 0 : ni < 6 ? 1 : 2;
+          var a = (ni / (ring === 1 ? 5 : 10)) * Math.PI * 2 + hash(ni, 21) * 0.6;
+          var rad = ring === 0 ? 0 : ring === 1 ? 190 + hash(ni, 22) * 40 : 340 + hash(ni, 23) * 70;
+          nodes.push({ x: 590 + Math.cos(a) * rad * 1.15, y: 450 + Math.sin(a) * rad * 0.95, ring: ring });
+        }
+        var edges = [];
+        for (var e1 = 0; e1 < nodes.length; e1++) {
+          for (var e2 = e1 + 1; e2 < nodes.length; e2++) {
+            var dx = nodes[e1].x - nodes[e2].x, dy = nodes[e1].y - nodes[e2].y;
+            if (Math.abs(nodes[e1].ring - nodes[e2].ring) === 1 && Math.sqrt(dx * dx + dy * dy) < 330) {
+              var ln = document.createElementNS(SVGNS, "line");
+              ln.setAttribute("x1", nodes[e1].x); ln.setAttribute("y1", nodes[e1].y);
+              ln.setAttribute("x2", nodes[e2].x); ln.setAttribute("y2", nodes[e2].y);
+              ln.setAttribute("pathLength", "1");
+              ln.setAttribute("stroke", "#d97757"); ln.setAttribute("stroke-opacity", "0.7");
+              ln.setAttribute("stroke-width", "4"); ln.setAttribute("stroke-dasharray", "1");
+              ln.setAttribute("stroke-dashoffset", "1"); ln.setAttribute("class", "b1-edge");
+              ln.dataset.order = nodes[e1].ring;
+              net.appendChild(ln); edges.push(ln);
+            }
+          }
+        }
+        var nodeEls = nodes.map(function (n, i) {
+          var c = document.createElementNS(SVGNS, "circle");
+          c.setAttribute("cx", n.x); c.setAttribute("cy", n.y);
+          c.setAttribute("r", n.ring === 0 ? 34 : n.ring === 1 ? 18 : 12);
+          c.setAttribute("fill", n.ring === 0 ? "#d97757" : "#f2ebe1");
+          net.appendChild(c);
+          return c;
+        });
+
+        // ---------- beat 3: tiles with generated content ----------
+        var tilesEl = document.getElementById("b3-tiles");
+        var tileEls = [];
+        for (var ti = 0; ti < 12; ti++) {
+          var tile = document.createElement("div");
+          tile.className = "tile" + (ti === 5 ? " hero" : "");
+          var s = document.createElementNS(SVGNS, "svg");
+          s.setAttribute("viewBox", "0 0 260 230");
+          s.setAttribute("preserveAspectRatio", "none");
+          var kind = ti % 4;
+          var html = "";
+          if (kind === 0) {
+            for (var b = 0; b < 6; b++) {
+              var h = 30 + hash(ti, b) * 130;
+              html += '<rect x="' + (30 + b * 35) + '" y="' + (200 - h) + '" width="22" height="' + h.toFixed(1) + '" rx="6" fill="' + (b === 4 ? "#d97757" : "#5a4e45") + '"/>';
+            }
+          } else if (kind === 1) {
+            var d = "M 20 150";
+            for (var p = 1; p <= 10; p++) d += " L " + (20 + p * 22) + " " + (150 - Math.sin(p * 0.8 + ti) * 50 - p * 6).toFixed(1);
+            html = '<path d="' + d + '" fill="none" stroke="#f0a483" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>';
+          } else if (kind === 2) {
+            html = '<circle cx="130" cy="115" r="70" fill="none" stroke="#5a4e45" stroke-width="18"/>' +
+              '<circle cx="130" cy="115" r="70" fill="none" stroke="#d97757" stroke-width="18" stroke-dasharray="' + (100 + hash(ti, 3) * 250).toFixed(0) + ' 999" transform="rotate(-90 130 115)"/>';
+          } else {
+            for (var l = 0; l < 5; l++) html += '<rect x="28" y="' + (38 + l * 34) + '" width="' + (80 + hash(ti, l + 9) * 130).toFixed(0) + '" height="14" rx="7" fill="' + (l === 0 ? "#f2ebe1" : "#4a403a") + '"/>';
+          }
+          s.innerHTML = html;
+          tile.appendChild(s);
+          tilesEl.appendChild(tile);
+          tileEls.push(tile);
+        }
+
+        // ---------- procedural field (canvas) ----------
+        var cv = document.getElementById("field");
+        var ctx = cv.getContext("2d");
+        var N = 1300;
+        var P = [];
+        for (var i = 0; i < N; i++) {
+          var th = hash(i, 1) * Math.PI * 2;
+          var ph = Math.acos(2 * hash(i, 2) - 1);
+          var rr = 0.35 + Math.pow(hash(i, 3), 0.55) * 1.05;
+          P.push({
+            x: rr * Math.sin(ph) * Math.cos(th),
+            y: rr * Math.sin(ph) * Math.sin(th),
+            z: rr * Math.cos(ph),
+            size: 1.1 + Math.pow(hash(i, 4), 4) * 4.5,
+            warm: hash(i, 5) < 0.2,
+            tw: hash(i, 6) * Math.PI * 2,
+            spin: 0.6 + hash(i, 7),
+            ra: hash(i, 8) * Math.PI * 2,
+            rr: 0.95 + (hash(i, 9) - 0.5) * 0.22,
+            rz: (hash(i, 10) - 0.5) * 0.08
+          });
+        }
+        var F = 1650, D = 2.7;
+
+        function warpTravel(t) { return 9.5 * inOutCubic(prog(t, 10.15, 1.75)); }
+
+        function particlePos(p, t) {
+          // collapse toward the core (0-3s), then burst into a slowly turning nebula
+          var m, spiral = 0;
+          if (t < 3) {
+            var k = inCubic(prog(t, 0, 3));
+            m = lerp(3.0, 0.0, k);
+            spiral = Math.pow(1 - k, 2) * 2.6 * p.spin;
+          } else {
+            m = outExpo(prog(t, 3, 1.5)) * (1 + 0.04 * Math.sin((t - 3) * 0.7));
+          }
+          var x = p.x * m, y = p.y * m, z = p.z * m;
+          if (spiral) {
+            var cs = Math.cos(spiral), sn = Math.sin(spiral);
+            var nx = x * cs - y * sn; y = x * sn + y * cs; x = nx;
+          }
+          var ry = 0.05 * t + 0.4, rx = 0.22;
+          var cy = Math.cos(ry), sy = Math.sin(ry);
+          var x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
+          var cx = Math.cos(rx), sx = Math.sin(rx);
+          var y1 = y * cx - z1 * sx, z2 = y * sx + z1 * cx;
+          // hyperspace: wrap depth while the camera flies through
+          var tr = warpTravel(t);
+          if (tr > 0) z2 = ((z2 + 1.45 - tr) % 2.9 + 2.9) % 2.9 - 1.45;
+          // lockup: settle into a tilted orbit ring
+          var h = inOutCubic(prog(t, 13.5, 2.0));
+          if (h > 0) {
+            var oa = p.ra + (t - 13.5) * 0.12 * p.spin;
+            var ox = Math.cos(oa) * p.rr * 1.32, oy = Math.sin(oa) * p.rr * 0.36 + p.rz, oz = Math.sin(oa) * p.rr * 0.9;
+            x1 = lerp(x1, ox, h); y1 = lerp(y1, oy, h); z2 = lerp(z2, oz, h);
+          }
+          return [x1, y1, z2];
+        }
+
+        function project(v) {
+          var zz = v[2] + D;
+          if (zz < 0.15) return null;
+          var s = F / zz;
+          return [CX + v[0] * s, CY + v[1] * s, s];
+        }
+
+        function drawField(t) {
+          ctx.globalCompositeOperation = "source-over";
+          var bgG = ctx.createRadialGradient(CX, CY, 0, CX, CY, 1700);
+          bgG.addColorStop(0, "#1b1512");
+          bgG.addColorStop(1, "#070606");
+          ctx.fillStyle = bgG;
+          ctx.fillRect(0, 0, W, H);
+
+          var intro = outCubic(prog(t, 0, 0.9));
+          var outro = 1 - prog(t, 17.2, 0.8);
+          var master = intro * outro;
+
+          ctx.globalCompositeOperation = "lighter";
+
+          // light rays behind the mark and lockup
+          var rayAmt = bump(t, 2.8, 3.3, 6.0, 6.45) * 0.9 + bump(t, 13.7, 14.6, 17.4, 18) * 0.45;
+          if (rayAmt > 0.001) {
+            for (var r = 0; r < 28; r++) {
+              var a0 = (r / 28) * Math.PI * 2 + t * 0.05 + hash(r, 31) * 0.2;
+              var wdt = 0.012 + hash(r, 32) * 0.03;
+              var len = 1500 + hash(r, 33) * 900;
+              var g = ctx.createLinearGradient(CX, CY, CX + Math.cos(a0) * len, CY + Math.sin(a0) * len);
+              var al = rayAmt * (0.05 + hash(r, 34) * 0.08) * master;
+              g.addColorStop(0, "rgba(240,164,131," + al.toFixed(4) + ")");
+              g.addColorStop(1, "rgba(240,164,131,0)");
+              ctx.fillStyle = g;
+              ctx.beginPath();
+              ctx.moveTo(CX, CY);
+              ctx.lineTo(CX + Math.cos(a0 - wdt) * len, CY + Math.sin(a0 - wdt) * len);
+              ctx.lineTo(CX + Math.cos(a0 + wdt) * len, CY + Math.sin(a0 + wdt) * len);
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
+
+          // particles
+          var speed = warpTravel(t + 0.02) - warpTravel(t - 0.02);
+          var streak = speed > 0.004;
+          for (var i = 0; i < N; i++) {
+            var p = P[i];
+            var v = particlePos(p, t);
+            var pr = project(v);
+            if (!pr) continue;
+            if (pr[0] < -60 || pr[0] > W + 60 || pr[1] < -60 || pr[1] > H + 60) continue;
+            var depth = clamp((pr[2] - 350) / 1600, 0, 1);
+            var twk = 0.65 + 0.35 * Math.sin(t * 2.2 + p.tw);
+            var a = master * (0.25 + 0.75 * depth) * twk;
+            if (t < 3) a *= 0.35 + 0.65 * prog(t, 0, 2.6);
+            var col = p.warm ? "217,119,87" : "242,232,220";
+            var sz = p.size * (0.4 + pr[2] / 900);
+            if (streak) {
+              var pv = project(particlePos(p, t - 0.045));
+              if (pv && Math.abs(pv[1] - pr[1]) + Math.abs(pv[0] - pr[0]) < 900) {
+                ctx.strokeStyle = "rgba(" + col + "," + (a * 0.85).toFixed(3) + ")";
+                ctx.lineWidth = Math.max(1, sz * 0.8);
+                ctx.beginPath(); ctx.moveTo(pv[0], pv[1]); ctx.lineTo(pr[0], pr[1]); ctx.stroke();
+                continue;
+              }
+            }
+            ctx.fillStyle = "rgba(" + col + "," + a.toFixed(3) + ")";
+            ctx.beginPath(); ctx.arc(pr[0], pr[1], sz, 0, 6.2832); ctx.fill();
+            if (sz > 3.2) {
+              ctx.fillStyle = "rgba(" + col + "," + (a * 0.12).toFixed(3) + ")";
+              ctx.beginPath(); ctx.arc(pr[0], pr[1], sz * 4, 0, 6.2832); ctx.fill();
+            }
+          }
+
+          // the core: gathers light until it ignites at 3s
+          var core = Math.pow(prog(t, 0.6, 2.4), 3) * (1 - prog(t, 3.0, 0.7)) * 1.2
+            + bump(t, 3.0, 3.2, 4.0, 6.4) * 0.55 + bump(t, 10.9, 11.6, 13.0, 13.6) * 0.35 + bump(t, 13.6, 14.4, 17.0, 18) * 0.4;
+          if (core > 0.001) {
+            var cr = 120 + core * 900;
+            var cg = ctx.createRadialGradient(CX, CY, 0, CX, CY, cr);
+            cg.addColorStop(0, "rgba(255,240,228," + clamp(core * 0.9, 0, 1).toFixed(3) + ")");
+            cg.addColorStop(0.25, "rgba(240,150,110," + clamp(core * 0.35, 0, 1).toFixed(3) + ")");
+            cg.addColorStop(1, "rgba(217,119,87,0)");
+            ctx.fillStyle = cg;
+            ctx.fillRect(CX - cr, CY - cr, cr * 2, cr * 2);
+          }
+        }
+
+        // ---------- film grain (low-res, upscaled) ----------
+        var gc = document.getElementById("grain");
+        var gx = gc.getContext("2d");
+        var gimg = gx.createImageData(640, 360);
+        function drawGrain(t) {
+          var f = Math.floor(t * 24);
+          var d = gimg.data;
+          for (var j = 0, q = 0; j < d.length; j += 4, q++) {
+            var v = (hash(q, f) * 255) | 0;
+            d[j] = v; d[j + 1] = v; d[j + 2] = v; d[j + 3] = 255;
+          }
+          gx.putImageData(gimg, 0, 0);
+        }
+
+        var state = { t: 0 };
+        function paint() { drawField(state.t); drawGrain(state.t); }
+
+        // ---------- timeline ----------
+        var tl = gsap.timeline({ paused: true });
+        tl.fromTo(state, { t: 0 }, { t: DUR, duration: DUR, ease: "none", onUpdate: paint }, 0);
+
+        // letterbox: present through the film, open up for the lockup
+        tl.fromTo(["#bar-top", "#bar-bot"], { scaleY: 1.6 }, { scaleY: 1, duration: 1.6, ease: "power2.out" }, 0);
+        tl.to("#bar-top", { y: -150, duration: 1.1, ease: "power3.inOut" }, 13.45);
+        tl.to("#bar-bot", { y: 150, duration: 1.1, ease: "power3.inOut" }, 13.45);
+        gsap.set(["#bar-top"], { transformOrigin: "50% 0%" });
+        gsap.set(["#bar-bot"], { transformOrigin: "50% 100%" });
+
+        // flash cuts
+        function flash(at, peak, hold) {
+          tl.fromTo("#flash", { opacity: 0 }, { opacity: peak, duration: 0.06, ease: "none" }, at - 0.06);
+          tl.to("#flash", { opacity: 0, duration: hold, ease: "power2.out" }, at);
+        }
+        flash(3.0, 1, 0.75);
+        flash(6.4, 0.55, 0.35);
+        flash(7.73, 0.4, 0.3);
+        flash(9.07, 0.4, 0.3);
+        flash(10.4, 0.7, 0.5);
+        flash(13.6, 0.9, 0.7);
+
+        // S1 — two lines wipe in from the right (RTL), then collapse into the core
+        tl.fromTo("#s1-a", { clipPath: "inset(0 0 0 100%)", opacity: 0, y: 30, filter: "blur(18px)" },
+          { clipPath: "inset(0 0 0 0%)", opacity: 1, y: 0, filter: "blur(0px)", duration: 1.0, ease: "power3.out" }, 0.35);
+        tl.fromTo("#s1-b", { clipPath: "inset(0 0 0 100%)", opacity: 0, y: 40, filter: "blur(22px)" },
+          { clipPath: "inset(0 0 0 0%)", opacity: 1, y: 0, filter: "blur(0px)", duration: 1.0, ease: "power3.out" }, 1.15);
+        tl.fromTo("#s1 .center", { scale: 1.06 }, { scale: 1, duration: 2.4, ease: "sine.out" }, 0);
+        tl.to("#s1 .center", { scale: 0.35, opacity: 0, filter: "blur(30px)", duration: 0.55, ease: "power3.in" }, 2.45);
+
+        // S2 — rays shoot out of the core, shockwaves, slow spin, caption, then push-through
+        gsap.set(mark2.rays, { svgOrigin: "0 0" });
+        tl.fromTo(mark2.core, { scale: 0, svgOrigin: "0 0" }, { scale: 1, duration: 0.5, ease: "back.out(3)" }, 3.0);
+        tl.fromTo(mark2.rays, { scaleY: 0, scaleX: 0.4 },
+          { scaleY: 1, scaleX: 1, duration: 0.9, ease: "elastic.out(1, 0.55)", stagger: { each: 0.035, from: "random" } }, 3.02);
+        tl.fromTo("#s2-mark", { rotation: -60 }, { rotation: 40, duration: 3.45, ease: "power2.out" }, 3.0);
+        tl.fromTo("#s2-cam", { scale: 0.7 }, { scale: 1.05, duration: 2.9, ease: "power2.out" }, 3.0);
+        rings.forEach(function (c, i) {
+          tl.fromTo(c, { attr: { r: 60 }, opacity: 1 }, { attr: { r: 1300 + i * 250 }, opacity: 0, duration: 1.3 + i * 0.25, ease: "power2.out" }, 3.0 + i * 0.09);
+        });
+        tl.fromTo("#s2-cap", { clipPath: "inset(0 0 0 100%)", opacity: 0, y: 30 },
+          { clipPath: "inset(0 0 0 0%)", opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 4.25);
+        tl.to("#s2-cap", { opacity: 0, y: -20, filter: "blur(12px)", duration: 0.35, ease: "power2.in" }, 5.95);
+        tl.to("#s2-cam", { scale: 7, opacity: 0, filter: "blur(16px)", duration: 0.55, ease: "power3.in" }, 5.9);
+
+        // S3 beats — shared choreography
+        function beat(id, at) {
+          var b = "#" + id;
+          tl.fromTo(b + " .kicker", { opacity: 0, x: 90 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, at + 0.02);
+          tl.fromTo(b + "-word", { opacity: 0, scale: 1.25, filter: "blur(24px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.45, ease: "expo.out" }, at);
+          tl.fromTo(b + "-rule", { scaleX: 0, transformOrigin: "100% 50%" }, { scaleX: 1, duration: 0.6, ease: "power3.inOut" }, at + 0.15);
+          tl.fromTo(b + "-sub", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, at + 0.32);
+          tl.fromTo(b, { scale: 1.0 }, { scale: 1.035, duration: 1.36, ease: "none" }, at);
+        }
+        beat("b1", 6.4);
+        beat("b2", 7.73);
+        beat("b3", 9.07);
+
+        // b1 network draws outward from the core node
+        tl.fromTo(nodeEls, { scale: 0, transformOrigin: "50% 50%" }, { scale: 1, duration: 0.4, ease: "back.out(2.5)", stagger: 0.03 }, 6.42);
+        var inner = edges.filter(function (e) { return e.dataset.order === "0"; });
+        var outer = edges.filter(function (e) { return e.dataset.order !== "0"; });
+        tl.fromTo(inner, { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.4, ease: "power2.out", stagger: 0.03 }, 6.45);
+        tl.fromTo(outer, { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.45, ease: "power2.out", stagger: 0.02 }, 6.7);
+        tl.fromTo("#b1-net", { rotation: -6, scale: 0.9 }, { rotation: 4, scale: 1.04, duration: 1.36, ease: "power1.out" }, 6.4);
+
+        // b2 code types line by line
+        tl.fromTo("#b2-code", { opacity: 0, y: 60, rotationY: 12, transformPerspective: 2000 }, { opacity: 1, y: 0, rotationY: 0, duration: 0.5, ease: "power3.out" }, 7.73);
+        tl.fromTo("#b2-code .ln", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 0.16, ease: "none", stagger: 0.11 }, 7.85);
+
+        // b3 camera pulls back across the grid
+        tl.fromTo("#b3-tiles", { scale: 3.2, transformOrigin: "62% 50%" }, { scale: 1, duration: 1.1, ease: "expo.out" }, 9.07);
+        tl.fromTo(tileEls, { opacity: 0 }, { opacity: 1, duration: 0.3, stagger: { each: 0.03, from: 5 } }, 9.1);
+
+        // S4 — the number swings in out of hyperspace, light sweeps across it
+        tl.fromTo("#s4-num", { opacity: 0, rotationY: -75, z: -1600, filter: "blur(30px)" },
+          { opacity: 1, rotationY: 0, z: 0, filter: "blur(0px)", duration: 1.3, ease: "expo.out" }, 10.85);
+        tl.fromTo("#s4-kick", { opacity: 0, scale: 1.6, y: -40 }, { opacity: 1, scale: 1, y: 0, duration: 1.1, ease: "power3.out" }, 11.2);
+        tl.fromTo("#s4-num", { backgroundPosition: "100% 0" }, { backgroundPosition: "0% 0", duration: 1.2, ease: "power2.inOut" }, 11.9);
+        tl.fromTo("#s4-stage", { scale: 1 }, { scale: 1.08, duration: 1.95, ease: "none" }, 11.2);
+        tl.to("#s4-stage", { scale: 4.5, opacity: 0, filter: "blur(20px)", duration: 0.5, ease: "power3.in" }, 13.15);
+
+        // S5 — lockup
+        gsap.set(mark5.rays, { svgOrigin: "0 0" });
+        tl.fromTo(mark5.core, { scale: 0, svgOrigin: "0 0" }, { scale: 1, duration: 0.45, ease: "back.out(3)" }, 13.65);
+        tl.fromTo(mark5.rays, { scaleY: 0 }, { scaleY: 1, duration: 0.8, ease: "elastic.out(1, 0.6)", stagger: 0.03 }, 13.7);
+        tl.fromTo("#s5-mark", { rotation: -90 }, { rotation: 0, duration: 1.6, ease: "expo.out" }, 13.65);
+        tl.fromTo("#s5-mark", { rotation: 0 }, { rotation: 18, duration: 2.75, ease: "none", immediateRender: false }, 15.25);
+        tl.fromTo("#s5-word span", { opacity: 0, y: 90, filter: "blur(16px)" },
+          { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.7, ease: "expo.out", stagger: 0.05 }, 13.95);
+        tl.fromTo("#s5-opus", { opacity: 0, scale: 1.25, filter: "blur(12px)" },
+          { opacity: 1, scale: 1, filter: "blur(0px)", duration: 1.0, ease: "expo.out" }, 14.55);
+        tl.fromTo("#s5-tag", { clipPath: "inset(0 0 0 100%)", opacity: 0, y: 24 },
+          { clipPath: "inset(0 0 0 0%)", opacity: 1, y: 0, duration: 0.9, ease: "power3.out" }, 15.3);
+        tl.fromTo("#s5-pill", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(2)" }, 15.95);
+        tl.fromTo("#s5-cam", { scale: 0.94 }, { scale: 1.0, duration: 4.4, ease: "power1.out" }, 13.6);
+
+        // end
+        tl.fromTo("#fade", { opacity: 0 }, { opacity: 1, duration: 0.75, ease: "power2.in" }, 17.25);
+
+        paint();
+        window.__timelines["main"] = tl;
+      })();
+    </script>
+  </body>
+</html>
