@@ -1,4 +1,4 @@
-"""Cinematic 5 s score + sound design for src/desert-thirst.html.
+"""Cinematic 5 s score + sound design for src/desert-thirst-cinematic.html.
 
 Hijaz-mode ney/duduk-style lead over a low drone and string pad, desert wind,
 a sand-gust whoosh (1.6-2.9 s), a deep frame-drum impact when he falls to his
@@ -11,7 +11,7 @@ import numpy as np
 
 SR = 44100
 DUR = 5.0
-OUT = Path(__file__).resolve().parent.parent / "output" / "desert-thirst-soundtrack.wav"
+OUT = Path(__file__).resolve().parent.parent / "output" / "desert-thirst-cinematic-soundtrack.wav"
 n = int(SR * DUR)
 t = np.arange(n) / SR
 L = np.zeros(n); R = np.zeros(n)
