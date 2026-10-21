@@ -47,7 +47,10 @@
     "count:preview": "node scripts/render.mjs --src src/count.html --preview --times 0.3,10.2,30.4,59",
     "count:render": "node scripts/render.mjs --src src/count.html --audio none --out output/count-0-100.mp4",
     "tts": "python3 scripts/gemini_tts.py",
-    "abu-janna:vo": "python3 scripts/gemini_tts.py --script abu-janna/vo-script.txt --out output/abu-janna-vo.wav --voice Puck --style \"اقرأ بلهجة عراقية، بحماس وطاقة إعلانية\""
+    "abu-janna:vo": "python3 scripts/gemini_tts.py --script abu-janna/vo-script.txt --out output/abu-janna-vo.wav --voice Puck --style \"اقرأ بلهجة عراقية، بحماس وطاقة إعلانية\"",
+    "talabat:audio": "python3 scripts/talabat_soundtrack.py",
+    "talabat:preview": "node scripts/render.mjs --src src/talabat.html --preview --times 1.2,2.8,5,6.9,8.6,10.5,13.5,17,19.2",
+    "talabat:render": "node scripts/render.mjs --src src/talabat.html --audio output/talabat-soundtrack.wav --out output/talabat.mp4"
   },
   "devDependencies": {
     "playwright": "1.56.1"
