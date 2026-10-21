@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Desert Thirst</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// 5 s cinematic shot: a thirsty man in the desert collapses to his knees and calls for help.
+// One continuous camera move (wide crane -> push-in close) with parallax depth layers,
+// a sand gust that wipes across mid-move, heat haze, anamorphic sun flare, grain and letterbox.
+const W = 1920, H = 1080;
+const DURATION = 5;
+const out = document.getElementById("c").getContext("2d");
+const sceneC = document.createElement("canvas"); sceneC.width = W; sceneC.height = H;
+const ctx = sceneC.getContext("2d");
+const bloomC = document.createElement("canvas"); bloomC.width = W / 8; bloomC.height = H / 8;
+const bctx = bloomC.getContext("2d");
+
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, s, d) => clamp((t - s) / d);
+const sstep = k => k * k * (3 - 2 * k);
+const eIO = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOut = k => 1 - Math.pow(1 - k, 3);
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+// ---------- camera ----------
+const HORIZON = 600;
+const MAN = { x: 960, y: 842 };
+function camera(t) {
+  const k = eIO(prog(t, 0, DURATION));
+  const z = lerp(1.0, 2.25, k);
+  const fx = lerp(860, MAN.x - 10, k);
+  const fy = lerp(560, MAN.y - 150, eIO(prog(t, 0.3, 4.4)));
+  const track = lerp(-120, 120, k);            // lateral dolly -> parallax
+  // gentle handheld drift, scaled up as we get closer
+  const hh = 0.6 + k * 1.4;
+  const jx = (Math.sin(t * 1.7) * 3 + Math.sin(t * 4.3 + 1) * 1.2) * hh;
+  const jy = (Math.sin(t * 2.1 + 2) * 2.4 + Math.sin(t * 5.1) * 0.8) * hh;
+  const roll = (Math.sin(t * 1.3) * 0.004 + lerp(-0.012, 0.006, k));
+  return { z, fx, fy, track, jx, jy, roll };
+}
+// place a depth layer: d=0 infinitely far, d=1 the man's plane, d>1 foreground
+function layer(cam, d) {
+  const s = 1 + (cam.z - 1) * d;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.translate(W / 2 + cam.jx * d, H / 2 + cam.jy * d);
+  ctx.rotate(cam.roll * Math.min(1, d));
+  ctx.scale(s, s);
+  ctx.translate(-(960 + (cam.fx - 960 + cam.track) * d), -(540 + (cam.fy - 540) * d));
+  return s;
+}
+function toScreen(cam, d, x, y) {
+  const s = 1 + (cam.z - 1) * d;
+  return [W / 2 + cam.jx * d + (x - (960 + (cam.fx - 960 + cam.track) * d)) * s,
+          H / 2 + cam.jy * d + (y - (540 + (cam.fy - 540) * d)) * s];
+}
+
+// ---------- terrain ----------
+function ridge(x, p) {
+  let y = p.base;
+  for (const [a, f, ph] of p.waves) y += a * Math.sin(x * f + ph);
+  // sharpen crests: dunes have soft windward slopes and steep slip faces
+  return y - p.sharp * Math.pow(Math.max(0, Math.sin(x * p.waves[0][1] + p.waves[0][2] + 0.6)), 6);
+}
+const DUNES = [
+  { d: 0.12, base: 596, waves: [[16, 0.0021, 0.4], [7, 0.0063, 1.3], [3, 0.017, 2]], sharp: 12, lit: ["#e9b98a", "#d79a6a"], shade: "rgba(150,82,60,0.55)", haze: 0.55 },
+  { d: 0.32, base: 640, waves: [[30, 0.0016, 2.2], [12, 0.0047, 0.2], [5, 0.012, 1]], sharp: 22, lit: ["#e8a868", "#cf8547"], shade: "rgba(120,58,34,0.6)", haze: 0.32 },
+  { d: 0.6, base: 715, waves: [[46, 0.0012, 4.1], [18, 0.0036, 2.6], [6, 0.011, 0.5]], sharp: 34, lit: ["#e59a55", "#b86a33"], shade: "rgba(96,42,22,0.62)", haze: 0.14 },
+];
+const SUN = { x: 1340, y: 360 };
+
+function sky(cam) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const [, hy] = toScreen(cam, 0.1, 0, HORIZON);
+  const g = ctx.createLinearGradient(0, 0, 0, hy + 40);
+  g.addColorStop(0, "#5e7f95");
+  g.addColorStop(0.45, "#b9b3a2");
+  g.addColorStop(0.8, "#f1c890");
+  g.addColorStop(1, "#ffd9a0");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+function sun(cam, t) {
+  const [sx, sy] = toScreen(cam, 0.05, SUN.x, SUN.y);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "lighter";
+  const r = 1 + 0.02 * Math.sin(t * 3);
+  let g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 700 * r);
+  g.addColorStop(0, "rgba(255,240,200,0.75)"); g.addColorStop(0.15, "rgba(255,200,120,0.35)"); g.addColorStop(1, "rgba(255,150,60,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 70);
+  g.addColorStop(0, "rgba(255,255,250,1)"); g.addColorStop(0.5, "rgba(255,250,225,0.95)"); g.addColorStop(1, "rgba(255,230,170,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, 70, 0, 7); ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  return [sx, sy];
+}
+function dunes(cam, t) {
+  for (const p of DUNES) {
+    layer(cam, p.d);
+    const x0 = -900, x1 = 2900, step = 6;
+    const g = ctx.createLinearGradient(0, p.base - 60, 0, 1500);
+    g.addColorStop(0, p.lit[0]); g.addColorStop(0.35, p.lit[1]); g.addColorStop(1, "#7a3f22");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x0, 2000);
+    for (let x = x0; x <= x1; x += step) ctx.lineTo(x, ridge(x, p));
+    ctx.lineTo(x1, 2000); ctx.closePath(); ctx.fill();
+    // slip-face shadows: slopes falling to the right face away from the low sun's light direction
+    ctx.fillStyle = p.shade; ctx.filter = `blur(${4 + p.d * 6}px)`;
+    ctx.beginPath(); ctx.moveTo(x0, ridge(x0, p));
+    for (let x = x0; x <= x1; x += step) ctx.lineTo(x, ridge(x, p));
+    for (let x = x1; x >= x0; x -= step) {
+      const sl = (ridge(x + 4, p) - ridge(x - 4, p)) / 8;
+      ctx.lineTo(x, ridge(x, p) + Math.min(90, Math.max(0, sl - 0.03) * 260) * (1 + p.d));
+    }
+    ctx.closePath(); ctx.fill(); ctx.filter = "none";
+    // crest highlight
+    ctx.strokeStyle = "rgba(255,230,180,0.35)"; ctx.lineWidth = 1.5 / (1 + p.d);
+    ctx.beginPath(); for (let x = x0; x <= x1; x += step) { const y = ridge(x, p); x === x0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke();
+    // atmospheric haze toward the sun
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const [, hy] = toScreen(cam, p.d, 0, p.base);
+    const hz = ctx.createLinearGradient(0, hy - 120, 0, hy + 180);
+    hz.addColorStop(0, "rgba(255,214,160,0)"); hz.addColorStop(0.4, `rgba(255,214,160,${p.haze})`); hz.addColorStop(1, "rgba(255,214,160,0)");
+    ctx.fillStyle = hz; ctx.fillRect(0, hy - 120, W, 300);
+  }
+}
+
+// main ground plane (d=1) with wind ripples and footprints
+const GROUND = { base: 790 };
+const groundY = x => GROUND.base + 22 * Math.sin(x * 0.0009 + 1.2) + 8 * Math.sin(x * 0.0031);
+const ripples = (() => { const r = rng(7); return Array.from({ length: 260 }, () => ({ x: -600 + r() * 3200, y: 805 + Math.pow(r(), 1.6) * 700, w: 60 + r() * 220, a: 0.05 + r() * 0.12, c: r() })); })();
+const PRINTS = (() => {
+  const a = []; for (let i = 0; i < 46; i++) {
+    const k = i / 45;                        // 0 = at the man, 1 = far away near the horizon
+    const x = MAN.x + 40 + Math.pow(k, 0.8) * 900 + Math.sin(k * 9) * 60 * k;
+    const y = lerp(MAN.y + 6, 812, Math.pow(k, 0.55));
+    a.push({ x: x + (i % 2 ? 7 : -7) * (1 - k), y, s: lerp(1, 0.25, k) });
+  } return a;
+})();
+function ground(cam, t) {
+  layer(cam, 1);
+  const g = ctx.createLinearGradient(0, 760, 0, 1400);
+  g.addColorStop(0, "#e2a060"); g.addColorStop(0.25, "#cf8546"); g.addColorStop(1, "#8c4a25");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-1200, 2200);
+  for (let x = -1200; x <= 3200; x += 10) ctx.lineTo(x, groundY(x));
+  ctx.lineTo(3200, 2200); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(255,228,180,0.4)"; ctx.lineWidth = 1.2;
+  ctx.beginPath(); for (let x = -1200; x <= 3200; x += 10) { const y = groundY(x); x === -1200 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke();
+  // wind ripples
+  for (const r of ripples) {
+    if (r.y < groundY(r.x) + 6) continue;
+    const persp = (r.y - 780) / 600;
+    ctx.strokeStyle = r.c > 0.5 ? `rgba(110,52,24,${r.a})` : `rgba(255,220,170,${r.a * 0.9})`;
+    ctx.lineWidth = 1 + persp * 2.2;
+    ctx.beginPath(); ctx.moveTo(r.x, r.y);
+    ctx.quadraticCurveTo(r.x + r.w / 2, r.y - 4 - persp * 6, r.x + r.w * (0.6 + persp), r.y + 2);
+    ctx.stroke();
+  }
+  // footprints trailing back toward the horizon
+  for (const p of PRINTS) {
+    ctx.fillStyle = `rgba(92,40,18,${0.42 * p.s + 0.1})`;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y, 9 * p.s, 3.4 * p.s, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgba(255,214,160,${0.25 * p.s})`;
+    ctx.beginPath(); ctx.ellipse(p.x + 2 * p.s, p.y + 2 * p.s, 9 * p.s, 2 * p.s, 0, 0, Math.PI); ctx.fill();
+  }
+}
+
+// ---------- the man ----------
+const P = (o) => o;
+const POSES = {
+  walkA: P({ head: [-10, -236], neck: [-8, -214], sh: [-6, -204], hip: [2, -124], kneeF: [-18, -64], footF: [-34, 0], kneeB: [14, -60], footB: [30, -6], elbowF: [-14, -158], handF: [-6, -112], elbowB: [4, -160], handB: [16, -116] }),
+  walkB: P({ head: [-10, -238], neck: [-8, -216], sh: [-6, -206], hip: [2, -126], kneeF: [12, -62], footF: [26, -4], kneeB: [-16, -64], footB: [-30, 0], elbowF: [2, -160], handF: [12, -116], elbowB: [-12, -158], handB: [-4, -112] }),
+  stagger: P({ head: [-30, -214], neck: [-24, -194], sh: [-20, -186], hip: [0, -112], kneeF: [-26, -58], footF: [-40, 0], kneeB: [16, -50], footB: [34, -2], elbowF: [-40, -150], handF: [-46, -108], elbowB: [6, -150], handB: [8, -110] }),
+  kneel: P({ head: [-22, -164], neck: [-18, -144], sh: [-14, -134], hip: [6, -64], kneeF: [-30, -48], footF: [-36, 0], kneeB: [8, -4], footB: [48, -2], elbowF: [-34, -98], handF: [-36, -56], elbowB: [4, -96], handB: [-4, -66] }),
+  reach: P({ head: [-8, -170], neck: [-6, -148], sh: [-4, -138], hip: [8, -64], kneeF: [-30, -48], footF: [-36, 0], kneeB: [8, -4], footB: [48, -2], elbowF: [-30, -186], handF: [-46, -236], elbowB: [10, -104], handB: [-10, -118] }),
+};
+function mix(a, b, k) { const o = {}; for (const key in a) o[key] = [lerp(a[key][0], b[key][0], k), lerp(a[key][1], b[key][1], k)]; return o; }
+function pose(t) {
+  const ph = Math.sin(t * 4.6);                  // slow, heavy steps
+  let p = mix(POSES.walkA, POSES.walkB, 0.5 + 0.5 * ph);
+  p.head[1] += Math.abs(ph) * 3; p.neck[1] += Math.abs(ph) * 3;
+  p = mix(p, POSES.stagger, sstep(prog(t, 1.75, 0.55)));
+  p = mix(p, POSES.kneel, eOut(prog(t, 2.25, 0.5)));
+  p = mix(p, POSES.reach, eIO(prog(t, 2.95, 0.7)));
+  // trembling raised hand
+  const tr = prog(t, 3.4, 0.3);
+  p.handF[0] += Math.sin(t * 31) * 1.6 * tr; p.handF[1] += Math.sin(t * 23) * 1.2 * tr;
+  // breathing / sobbing heave while calling
+  const br = Math.sin(t * 7) * 1.6 * prog(t, 2.8, 0.4);
+  for (const k of ["head", "neck", "sh"]) p[k][1] += br;
+  return p;
+}
+function manX(t) { return MAN.x + lerp(70, 0, eOut(prog(t, 0, 2.4))); }
+
+function body(p, t, color, rim) {
+  const lw = rim ? 2.4 : 0;
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.strokeStyle = color; ctx.fillStyle = color;
+  const seg = (a, b, w) => { ctx.lineWidth = w + lw; ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); };
+  const dot = (c, r) => { ctx.beginPath(); ctx.arc(c[0], c[1], r + lw / 2, 0, 7); ctx.fill(); };
+  const foot = f => { ctx.beginPath(); ctx.ellipse(f[0] - 5, f[1] - 3, 11 + lw / 2, 4.5 + lw / 2, 0, 0, 7); ctx.fill(); };
+  const reachK = eIO(prog(t, 2.95, 0.7)), kneelK = sstep(prog(t, 2.25, 0.5));
+  const [hx, hy] = p.head;
+  const tilt = -0.55 * reachK + 0.25 * sstep(prog(t, 1.75, 0.6)) * (1 - reachK); // head drops, then looks up to the sky
+  const fl = Math.sin(t * 8), fl2 = Math.sin(t * 11 + 1);
+  // ghutra drape behind the head, streaming in the wind
+  ctx.beginPath();
+  ctx.moveTo(hx + 4, hy - 15);
+  ctx.quadraticCurveTo(hx + 22, hy - 8, hx + 24 + fl * 3, hy + 14);
+  ctx.quadraticCurveTo(hx + 40 + fl2 * 5, hy + 26 + fl * 4, hx + 58 + fl * 6, hy + 30 + fl2 * 6);
+  ctx.quadraticCurveTo(hx + 36, hy + 42, hx + 14, hy + 44);
+  ctx.lineTo(hx - 2, hy + 18); ctx.closePath();
+  if (rim) { ctx.lineWidth = lw * 1.6; ctx.stroke(); } ctx.fill();
+  // back limbs
+  seg(p.sh.map((v, i) => v + [10, 2][i]), p.elbowB, 13); seg(p.elbowB, p.handB, 11); dot(p.handB, 6);
+  seg(p.hip, p.kneeB, 16); seg(p.kneeB, p.footB, 13); foot(p.footB);
+  // robe (thobe) flapping in the wind
+  const hemY = lerp(-26, -4, kneelK);
+  const xs = [p.kneeF[0], p.kneeB[0], p.footF[0] * 0.5, p.footB[0] * 0.5];
+  const hemL = Math.min(...xs) - 14, hemR = Math.max(...xs) + 18 + 7 * Math.sin(t * 6);
+  ctx.beginPath();
+  ctx.moveTo(p.neck[0] - 8, p.neck[1]);
+  ctx.quadraticCurveTo(p.sh[0] - 22, p.sh[1] + 20, p.hip[0] - 20, p.hip[1] + 8);
+  ctx.quadraticCurveTo(lerp(p.hip[0], p.kneeF[0], 0.6) - 16, lerp(p.hip[1], hemY, 0.6), hemL, hemY);
+  for (let i = 1; i <= 8; i++) { const k = i / 8; ctx.lineTo(lerp(hemL, hemR, k), hemY + Math.sin(k * 11 + t * 9) * 2.5); }
+  ctx.quadraticCurveTo(p.hip[0] + 30 + 5 * Math.sin(t * 5), p.hip[1] + 14, p.hip[0] + 20, p.hip[1] - 6);
+  ctx.quadraticCurveTo(p.sh[0] + 26, p.sh[1] + 20, p.sh[0] + 16, p.sh[1] + 2);
+  ctx.quadraticCurveTo(p.neck[0] + 8, p.neck[1] - 6, p.neck[0] - 8, p.neck[1]);
+  ctx.closePath();
+  if (rim) { ctx.lineWidth = lw * 2; ctx.stroke(); } ctx.fill();
+  // front leg (only the shin and foot show below the hem)
+  seg(p.hip, p.kneeF, 16); seg(p.kneeF, p.footF, 13); foot(p.footF);
+  // neck + head in profile, facing left, with nose and chin
+  seg(p.neck, [hx + 2, hy + 6], 12);
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(tilt);
+  ctx.beginPath(); ctx.ellipse(0, 0, 13 + lw / 2, 15 + lw / 2, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-11, -2); ctx.lineTo(-18 - lw / 2, 3); ctx.lineTo(-12, 6);
+  ctx.quadraticCurveTo(-14, 14, -8, 17 + lw / 2); ctx.lineTo(2, 12); ctx.closePath(); ctx.fill();
+  // ghutra crown framing the face, with the agal band on top
+  ctx.beginPath(); ctx.moveTo(-14, -2); ctx.quadraticCurveTo(-16, -20, 0, -21 - lw / 2);
+  ctx.quadraticCurveTo(18 + lw / 2, -20, 18 + lw / 2, 2); ctx.lineTo(12, 18); ctx.lineTo(-6, -2); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  // front arm: raised to the sky while he calls
+  seg(p.sh, p.elbowF, 13); seg(p.elbowF, p.handF, 11);
+  ctx.save(); ctx.translate(...p.handF);
+  ctx.rotate(Math.atan2(p.handF[1] - p.elbowF[1], p.handF[0] - p.elbowF[0]));
+  ctx.beginPath(); ctx.ellipse(5, 0, 9 + lw / 2, 6.5 + lw / 2, 0, 0, 7); ctx.fill();
+  // spread fingers on the reaching hand
+  if (reachK > 0.4) { ctx.lineWidth = 3.2 + lw; for (const a of [-0.55, -0.2, 0.15, 0.5]) { ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(9 + Math.cos(a) * 12 * reachK, Math.sin(a) * 12 * reachK); ctx.stroke(); } }
+  ctx.restore();
+}
+function man(cam, t) {
+  layer(cam, 1);
+  const p = pose(t), x = manX(t), y = MAN.y;
+  // long shadow cast toward the camera, away from the sun
+  ctx.save(); ctx.translate(x, y); ctx.transform(1, 0, -1.1, -0.28, 0, 0); ctx.globalAlpha = 0.32;
+  ctx.filter = "blur(2px)"; body(p, t, "#4a1e0c", false); ctx.restore();
+  // dust kicked up when he drops to his knees
+  const dk = prog(t, 2.5, 1.6);
+  if (dk > 0 && dk < 1) {
+    const r = rng(3);
+    for (let i = 0; i < 70; i++) {
+      const a = Math.PI + r() * Math.PI, sp = 30 + r() * 120;
+      const px = x + Math.cos(a) * sp * eOut(dk) + 50 * dk, py = y + Math.sin(a) * sp * 0.35 * eOut(dk) - 8;
+      ctx.fillStyle = `rgba(232,180,120,${(1 - dk) * 0.35 * r()})`;
+      ctx.beginPath(); ctx.arc(px, py, 3 + r() * 9 * dk, 0, 7); ctx.fill();
+    }
+  }
+  ctx.save(); ctx.translate(x, y);
+  // backlit rim light, then the dark silhouette body
+  ctx.save(); ctx.translate(2.2, -0.8); ctx.filter = "blur(1.2px)"; body(p, t, "rgba(255,196,120,0.95)", true); ctx.restore();
+  body(p, t, "#3b2416", false);
+  ctx.restore();
+}
+
+function foreground(cam, t) {
+  layer(cam, 1.7);
+  ctx.filter = "blur(10px)";
+  const g = ctx.createLinearGradient(0, 900, 0, 1300);
+  g.addColorStop(0, "#9a5228"); g.addColorStop(1, "#3c180a");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-1400, 1800);
+  for (let x = -1400; x <= 900; x += 20) ctx.lineTo(x, 960 + 90 * Math.sin((x + 400) * 0.0021) + (x > 200 ? Math.pow((x - 200) / 70, 2) : 0));
+  ctx.lineTo(900, 1800); ctx.closePath(); ctx.fill();
+  ctx.filter = "none";
+}
+
+// ---------- atmosphere ----------
+const grains = (() => { const r = rng(42); return Array.from({ length: 900 }, () => ({ x: r() * 2400 - 200, y: 520 + r() * 640, s: 0.6 + r() * 2.2, v: 140 + r() * 380, d: 0.4 + r() * 1.3, p: r() * 7 })); })();
+function blowingSand(cam, t) {
+  // ground-hugging streams of sand that blow left -> right
+  for (const g of grains) {
+    layer(cam, g.d);
+    const x = ((g.x + t * g.v) % 2600) - 300;
+    const y = g.y + Math.sin(t * 3 + g.p) * 6;
+    ctx.fillStyle = `rgba(255,214,160,${0.18 + 0.2 * Math.sin(g.p + t)})`;
+    ctx.fillRect(x, y, g.s * 5, g.s * 0.8);
+  }
+}
+// sand gust sheet that sweeps across mid-move to mask the push-in
+function gust(t) {
+  const k = prog(t, 1.55, 1.35);
+  if (k <= 0 || k >= 1) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const cx = lerp(-900, W + 900, eIO(k));
+  const a = Math.sin(k * Math.PI);
+  for (let i = 0; i < 5; i++) {
+    const g = ctx.createRadialGradient(cx - i * 160, 560 + i * 90, 10, cx - i * 160, 560 + i * 90, 700);
+    g.addColorStop(0, `rgba(236,186,128,${0.34 * a})`); g.addColorStop(1, "rgba(236,186,128,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+}
+function heatHaze(cam, t) {
+  // shimmering displacement around the horizon, copied strip by strip
+  out.setTransform(1, 0, 0, 1, 0, 0);
+  out.filter = "contrast(1.14) saturate(1.08)";
+  out.drawImage(sceneC, 0, 0);
+  const [, hy] = toScreen(cam, 0.6, 0, 700);
+  for (let y = Math.max(0, hy - 140); y < Math.min(H, hy + 160); y += 3) {
+    const a = Math.exp(-Math.pow((y - hy) / 90, 2));
+    const dx = (Math.sin(y * 0.09 + t * 9) + 0.6 * Math.sin(y * 0.23 - t * 13)) * 2.6 * a;
+    out.drawImage(sceneC, 0, y, W, 3, dx, y, W, 3);
+  }
+  out.filter = "none";
+}
+function flare(sx, sy, t) {
+  out.globalCompositeOperation = "lighter";
+  // anamorphic horizontal streak
+  const g = out.createLinearGradient(sx - 1100, 0, sx + 1100, 0);
+  g.addColorStop(0, "rgba(120,170,255,0)"); g.addColorStop(0.5, "rgba(255,225,190,0.5)"); g.addColorStop(1, "rgba(120,170,255,0)");
+  out.fillStyle = g; out.fillRect(sx - 1100, sy - 3, 2200, 6);
+  out.fillStyle = "rgba(255,210,160,0.08)"; out.fillRect(sx - 900, sy - 16, 1800, 32);
+  // ghosts along the line through screen centre
+  const gx = W / 2 - sx, gy = H / 2 - sy;
+  for (const [k, r, c] of [[0.6, 40, "255,180,120"], [1.15, 90, "140,200,255"], [1.6, 26, "255,220,160"], [1.9, 140, "255,160,90"]]) {
+    const x = sx + gx * k * 2 / 2 + gx * k, y = sy + gy * k * 2;
+    const rg = out.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, `rgba(${c},0.0)`); rg.addColorStop(0.75, `rgba(${c},0.07)`); rg.addColorStop(1, `rgba(${c},0)`);
+    out.fillStyle = rg; out.beginPath(); out.arc(x, y, r, 0, 7); out.fill();
+  }
+  out.globalCompositeOperation = "source-over";
+}
+const noiseTiles = (() => {
+  const r = rng(99); return Array.from({ length: 4 }, () => {
+    const c = document.createElement("canvas"); c.width = 960; c.height = 540;
+    const x = c.getContext("2d"), im = x.createImageData(960, 540);
+    for (let i = 0; i < im.data.length; i += 4) { const v = r() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    x.putImageData(im, 0, 0); return c;
+  });
+})();
+function grade(t) {
+  out.setTransform(1, 0, 0, 1, 0, 0);
+  // bloom
+  bctx.clearRect(0, 0, bloomC.width, bloomC.height);
+  bctx.filter = "blur(6px) brightness(1.1)"; bctx.drawImage(out.canvas, 0, 0, bloomC.width, bloomC.height); bctx.filter = "none";
+  out.globalCompositeOperation = "screen"; out.globalAlpha = 0.22; out.drawImage(bloomC, 0, 0, W, H);
+  out.globalAlpha = 1;
+  // teal shadows / warm highlights
+  out.globalCompositeOperation = "soft-light";
+  const g = out.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "rgba(40,90,120,0.5)"); g.addColorStop(0.55, "rgba(255,170,90,0.35)"); g.addColorStop(1, "rgba(60,30,20,0.6)");
+  out.fillStyle = g; out.fillRect(0, 0, W, H);
+  out.globalCompositeOperation = "source-over";
+  // vignette
+  const v = out.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05);
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(18,6,0,0.72)");
+  out.fillStyle = v; out.fillRect(0, 0, W, H);
+  // film grain
+  out.globalCompositeOperation = "overlay"; out.globalAlpha = 0.07;
+  const tile = noiseTiles[Math.floor(t * 24) % 4];
+  out.drawImage(tile, -Math.floor(t * 24 * 37) % 60, -Math.floor(t * 24 * 53) % 40, W + 120, H + 80);
+  out.globalAlpha = 1; out.globalCompositeOperation = "source-over";
+}
+function titles(t) {
+  // subtitle synced to his call
+  const a = sstep(prog(t, 2.95, 0.35)) * (1 - sstep(prog(t, 4.7, 0.3)));
+  if (a > 0) {
+    out.save(); out.direction = "rtl"; out.textAlign = "center"; out.textBaseline = "middle";
+    out.font = "700 46px Cairo"; out.globalAlpha = a;
+    out.shadowColor = "rgba(0,0,0,0.85)"; out.shadowBlur = 14;
+    out.fillStyle = "#fff4e2";
+    out.fillText("يا غوث... ماء... أين من يساعدني؟!", W / 2, H - 70 + (1 - a) * 6);
+    out.restore();
+  }
+}
+function letterbox(t) {
+  const bar = 138;                               // 2.39:1 inside 16:9
+  out.fillStyle = "#000";
+  out.fillRect(0, 0, W, bar); out.fillRect(0, H - bar, W, bar);
+  // fade in from a bleached heat flash, fade to black at the very end
+  const flash = 1 - sstep(prog(t, 0, 0.9));
+  if (flash > 0) { out.fillStyle = `rgba(255,236,205,${flash})`; out.fillRect(0, bar, W, H - 2 * bar); }
+  const fin = sstep(prog(t, 4.6, 0.4));
+  if (fin > 0) { out.fillStyle = `rgba(0,0,0,${fin * 0.85})`; out.fillRect(0, 0, W, H); }
+}
+
+async function render(t) {
+  const cam = camera(t);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = "none";
+  sky(cam);
+  const [sx, sy] = sun(cam, t);
+  dunes(cam, t);
+  ground(cam, t);
+  man(cam, t);
+  blowingSand(cam, t);
+  foreground(cam, t);
+  gust(t);
+  heatHaze(cam, t);
+  flare(sx, sy, t);
+  grade(t);
+  letterbox(t);
+  titles(t);
+}
+window.DURATION = DURATION;
+window.render = render;
+window.ready = document.fonts.load("700 46px Cairo").then(() => render(0));
+</script>
+</body>
+</html>
