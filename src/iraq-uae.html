@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>العراق 3 - 0 الإمارات | خليجي 27</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #06120C; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 22;
+const C = {
+  bg: "#06120C", pitch: "#0C2A1A", card: "#0F1F17", white: "#F7F7F2", muted: "#9DB3A6",
+  gold: "#F5C542", red: "#CE1126", green: "#007A3D", uaeGreen: "#00732F", black: "#111111",
+};
+// match data
+const GOALS = [
+  { name: "زيدان إقبال", ord: "الهدف الأول", at: 7.9 },
+  { name: "سيف رشيد", ord: "الهدف الثاني", at: 9.9 },
+  { name: "كرار نبيل", ord: "الهدف الثالث", at: 11.9 },
+];
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eOutBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const font = (w, s) => `${w} ${s}px Cairo`;
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+
+function text(str, x, y, opts = {}) {
+  ctx.save();
+  ctx.direction = opts.dir || "rtl";
+  ctx.font = opts.font || font(700, 60);
+  ctx.textAlign = opts.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = opts.color || C.white;
+  ctx.globalAlpha *= opts.alpha ?? 1;
+  if (opts.spacing) ctx.letterSpacing = `${opts.spacing}px`;
+  if (opts.shadow) { ctx.shadowColor = opts.shadow; ctx.shadowBlur = 40; }
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// ---------- flags (drawn once to offscreen canvases) ----------
+const FW = 600, FH = 400;
+function makeFlag(draw) {
+  const c = document.createElement("canvas"); c.width = FW; c.height = FH;
+  draw(c.getContext("2d")); return c;
+}
+let FLAG_IRQ, FLAG_UAE;
+function buildFlags() {
+  FLAG_IRQ = makeFlag(g => {
+    g.fillStyle = C.red; g.fillRect(0, 0, FW, FH / 3);
+    g.fillStyle = "#FFFFFF"; g.fillRect(0, FH / 3, FW, FH / 3);
+    g.fillStyle = C.black; g.fillRect(0, (2 * FH) / 3, FW, FH / 3);
+    g.direction = "rtl"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.font = font(900, 92); g.fillStyle = C.green;
+    g.fillText("الله أكبر", FW / 2, FH / 2 + 4);
+  });
+  FLAG_UAE = makeFlag(g => {
+    const band = FW / 4;
+    g.fillStyle = C.uaeGreen; g.fillRect(band, 0, FW - band, FH / 3);
+    g.fillStyle = "#FFFFFF"; g.fillRect(band, FH / 3, FW - band, FH / 3);
+    g.fillStyle = C.black; g.fillRect(band, (2 * FH) / 3, FW - band, FH / 3);
+    g.fillStyle = C.red; g.fillRect(0, 0, band, FH);
+  });
+}
+
+// waving flag: vertical slices displaced by a travelling sine, pinned at the hoist
+function wavingFlag(img, x, y, w, h, t, amp = 14, phase = 0) {
+  const step = 4, sx = FW / w;
+  for (let i = 0; i < w; i += step) {
+    const k = i / w;
+    const a = Math.sin(i * 0.018 - t * 4.5 + phase);
+    const dy = a * amp * k;
+    ctx.drawImage(img, i * sx, 0, step * sx + 1, FH, x + i, y + dy, step + 0.6, h);
+    const shade = Math.cos(i * 0.018 - t * 4.5 + phase) * k;
+    ctx.fillStyle = shade > 0 ? `rgba(255,255,255,${shade * 0.12})` : `rgba(0,0,0,${-shade * 0.22})`;
+    ctx.fillRect(x + i, y + dy, step + 0.6, h);
+  }
+}
+
+// circular flag badge
+function flagBadge(img, cx, cy, r, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.closePath();
+  ctx.save(); ctx.clip();
+  const fh = r * 2, fw = fh * 1.5;
+  ctx.drawImage(img, cx - fw / 2, cy - r, fw, fh);
+  ctx.restore();
+  ctx.lineWidth = 5; ctx.strokeStyle = C.gold; ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- football ----------
+function ball(x, y, r, rot = 0, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.translate(x, y);
+  const g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
+  g.addColorStop(0, "#FFFFFF"); g.addColorStop(1, "#C9CEC9");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.save();
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.clip();
+  ctx.rotate(rot);
+  ctx.fillStyle = "#1A1A1A";
+  const pent = (px, py, s) => {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+      ctx[i ? "lineTo" : "moveTo"](px + Math.cos(a) * s, py + Math.sin(a) * s);
+    }
+    ctx.closePath(); ctx.fill();
+  };
+  pent(0, 0, r * 0.36);
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5 + Math.PI / 5;
+    pent(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95, r * 0.3);
+  }
+  ctx.strokeStyle = "#1A1A1A"; ctx.lineWidth = Math.max(1, r * 0.05);
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.36, Math.sin(a) * r * 0.36);
+    ctx.lineTo(Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+// ---------- background: night stadium pitch ----------
+const sparks = (() => {
+  const r = rng(11); const out = [];
+  for (let i = 0; i < 80; i++) out.push({ x: r() * W, y: r() * H, s: 1 + r() * 2.5, v: 10 + r() * 30, p: r() * 6.3, gold: r() > 0.6 });
+  return out;
+})();
+
+function drawBackground(t) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  // mowed stripes
+  ctx.save();
+  ctx.translate(CX, CY); ctx.rotate(-0.12); ctx.scale(1.08 + t * 0.004, 1.08 + t * 0.004);
+  for (let i = -12; i < 12; i++) {
+    ctx.fillStyle = i % 2 ? "rgba(20,70,40,0.35)" : "rgba(12,50,28,0.35)";
+    ctx.fillRect(i * 110, -900, 110, 1800);
+  }
+  // pitch markings
+  ctx.strokeStyle = "rgba(255,255,255,0.07)"; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(0, -900); ctx.lineTo(0, 900); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 260, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeRect(-1150, -520, 1150 * 2, 1040);
+  ctx.restore();
+
+  // stadium floodlight glow + vignette
+  const g = ctx.createRadialGradient(CX, -200, 100, CX, CY, 1300);
+  g.addColorStop(0, "rgba(255,240,200,0.10)");
+  g.addColorStop(0.5, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.75)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // drifting light sparks (confetti-like)
+  for (const p of sparks) {
+    const y = (p.y - t * p.v + H * 10) % H;
+    const a = 0.12 + 0.18 * Math.sin(t * 1.7 + p.p);
+    ctx.fillStyle = p.gold ? `rgba(245,197,66,${a})` : `rgba(247,247,242,${a})`;
+    ctx.beginPath(); ctx.arc(p.x, y, p.s, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// sweeping floodlight beams
+function beams(t, alpha) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  [[-80, 0.9, 0], [W + 80, -0.9, 1.7]].forEach(([x, dir, ph]) => {
+    for (let i = 0; i < 2; i++) {
+      const ang = Math.PI / 2 + dir * (0.35 + 0.18 * Math.sin(t * 1.3 + ph + i * 1.4));
+      const len = 1900;
+      const spread = 0.07;
+      const g = ctx.createLinearGradient(x, -60, x + Math.cos(ang) * len, -60 + Math.sin(ang) * len);
+      g.addColorStop(0, `rgba(255,245,215,${0.28 * alpha})`);
+      g.addColorStop(1, "rgba(255,245,215,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(x, -60);
+      ctx.lineTo(x + Math.cos(ang - spread) * len, -60 + Math.sin(ang - spread) * len);
+      ctx.lineTo(x + Math.cos(ang + spread) * len, -60 + Math.sin(ang + spread) * len);
+      ctx.closePath(); ctx.fill();
+    }
+  });
+  ctx.restore();
+}
+
+function shockwave(t, start, color, cx = CX, cy = CY, maxR = 600, dur = 1.0, width = 8) {
+  const k = prog(t, start, dur);
+  if (k <= 0 || k >= 1) return;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.globalAlpha = 1 - k; ctx.lineWidth = width * (1 - k) + 1;
+  ctx.beginPath(); ctx.arc(cx, cy, eOutCubic(k) * maxR, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+function flash(t, at, dur = 0.35, color = "255,255,255", peak = 0.85) {
+  const k = prog(t, at, dur);
+  if (k <= 0 || k >= 1) return;
+  ctx.fillStyle = `rgba(${color},${(1 - k) * peak})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// diagonal stripe wipe in Iraqi flag colors
+function stripeWipe(t, start) {
+  const cols = [C.red, "#FFFFFF", C.black];
+  const span = W + H;
+  cols.forEach((c, i) => {
+    const kin = eInOutCubic(prog(t, start + i * 0.07, 0.45));
+    const kout = eInOutCubic(prog(t, start + 0.5 + i * 0.07, 0.45));
+    if (kin <= 0 || kout >= 1) return;
+    const a = -span / 2 + span * kout, b = -span / 2 + span * kin;
+    ctx.save();
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    // band between diagonal lines x + y = a .. b (moving right-to-left for RTL)
+    const p = v => W - v;
+    ctx.moveTo(p(a), 0); ctx.lineTo(p(b), 0); ctx.lineTo(p(b) + H, H); ctx.lineTo(p(a) + H, H);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  });
+}
+
+// ---------- scene 1: tournament intro (0 - 3.5) ----------
+function scene1(t) {
+  if (t > 3.6) return;
+  beams(t, eOutCubic(prog(t, 0, 0.8)));
+  shockwave(t, 0.3, C.gold, CX, 440, 520);
+  shockwave(t, 0.45, "#FFFFFF", CX, 440, 620, 1.1, 5);
+
+  const exit = eInCubic(prog(t, 2.9, 0.45));
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  ctx.translate(CX, 440); ctx.scale(1 + exit * 0.4, 1 + exit * 0.4); ctx.translate(-CX, -440);
+
+  // emblem: gold ring with "27"
+  const k = eOutBack(prog(t, 0.2, 0.8));
+  if (k > 0) {
+    ctx.save();
+    ctx.translate(CX, 400);
+    ctx.scale(k, k);
+    ctx.rotate((1 - clamp(k)) * -1.2);
+    // rotating dashed outer ring
+    ctx.save(); ctx.rotate(t * 0.6);
+    ctx.strokeStyle = "rgba(245,197,66,0.6)"; ctx.lineWidth = 4; ctx.setLineDash([18, 14]);
+    ctx.beginPath(); ctx.arc(0, 0, 205, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    const g = ctx.createLinearGradient(0, -180, 0, 180);
+    g.addColorStop(0, "#FFE08A"); g.addColorStop(1, "#C8901A");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 175, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = C.bg;
+    ctx.beginPath(); ctx.arc(0, 0, 155, 0, Math.PI * 2); ctx.fill();
+    // shine sweep
+    ctx.save(); ctx.beginPath(); ctx.arc(0, 0, 155, 0, Math.PI * 2); ctx.clip();
+    const sx = lerp(-400, 400, prog(t, 1.0, 0.9));
+    const sg = ctx.createLinearGradient(sx - 80, 0, sx + 80, 0);
+    sg.addColorStop(0, "rgba(255,255,255,0)"); sg.addColorStop(0.5, "rgba(255,255,255,0.18)"); sg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = sg; ctx.fillRect(-200, -200, 400, 400);
+    ctx.restore();
+    text("27", 0, 8, { font: font(900, 170), color: C.gold, dir: "ltr" });
+    ctx.restore();
+  }
+
+  // title
+  const kT = eOutExpo(prog(t, 0.9, 0.9));
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 640, W, 150); ctx.clip();
+  text("كأس الخليج العربي", CX, 712 + (1 - kT) * 150, { font: font(900, 110), color: C.white });
+  ctx.restore();
+  const kS = eOutCubic(prog(t, 1.4, 0.6));
+  if (kS > 0) {
+    const lw = 520 * kS;
+    ctx.fillStyle = C.gold;
+    roundRect(CX - lw / 2, 800, lw, 6, 3); ctx.fill();
+    text("خليجي 27  •  العراق × الإمارات", CX, 850, { font: font(700, 40), color: C.muted, alpha: kS });
+  }
+  ctx.restore();
+}
+
+// ---------- scene 2: Iraq vs UAE (3.4 - 7.4) ----------
+function scene2(t) {
+  if (t < 3.4 || t > 7.5) return;
+  const exit = eInCubic(prog(t, 7.0, 0.4));
+  const fw = 480, fh = 320, fy = 330;
+
+  // Iraq slides in from the right, UAE from the left
+  const kI = eOutExpo(prog(t, 3.55, 0.9));
+  const kU = eOutExpo(prog(t, 3.75, 0.9));
+  const xI = lerp(W + 50, CX + 170, kI) + exit * 900;
+  const xU = lerp(-50 - fw, CX - 170 - fw, kU) - exit * 900;
+
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  // flag glows
+  [[xI + fw / 2, C.red], [xU + fw / 2, C.uaeGreen]].forEach(([gx, col]) => {
+    const g = ctx.createRadialGradient(gx, fy + fh / 2, 20, gx, fy + fh / 2, 420);
+    g.addColorStop(0, col + "55"); g.addColorStop(1, col + "00");
+    ctx.fillStyle = g; ctx.fillRect(gx - 450, fy - 300, 900, 900);
+  });
+  ctx.save(); ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 18;
+  ctx.fillStyle = "#000"; ctx.fillRect(xI, fy, fw, fh); ctx.fillRect(xU, fy, fw, fh); ctx.restore();
+  wavingFlag(FLAG_IRQ, xI, fy, fw, fh, t, 12, 0);
+  wavingFlag(FLAG_UAE, xU, fy, fw, fh, t, 12, 1.3);
+
+  // team names
+  const kN = eOutCubic(prog(t, 4.3, 0.6));
+  text("العراق", xI + fw / 2, 760 + (1 - kN) * 40, { font: font(900, 96), color: C.white, alpha: kN });
+  text("الإمارات", xU + fw / 2, 760 + (1 - kN) * 40, { font: font(900, 96), color: C.white, alpha: kN });
+  text("أسود الرافدين", xI + fw / 2, 845, { font: font(700, 38), color: C.gold, alpha: kN });
+  text("الأبيض الإماراتي", xU + fw / 2, 845, { font: font(700, 38), color: C.muted, alpha: kN });
+
+  // VS slam
+  const kV = prog(t, 4.0, 0.5);
+  if (kV > 0) {
+    const s = lerp(3.2, 1, eOutCubic(kV));
+    ctx.save();
+    ctx.translate(CX, fy + fh / 2);
+    ctx.scale(s, s);
+    ctx.globalAlpha *= clamp(kV * 3);
+    ctx.fillStyle = C.gold;
+    ctx.beginPath(); ctx.arc(0, 0, 78, 0, Math.PI * 2); ctx.fill();
+    text("VS", 0, 4, { font: font(900, 74), color: C.bg, dir: "ltr" });
+    ctx.restore();
+  }
+  ctx.restore();
+  shockwave(t, 4.42, C.gold, CX, fy + fh / 2, 700, 0.9, 10);
+
+  // fixture label
+  const kL = eOutCubic(prog(t, 4.6, 0.5)) * (1 - exit);
+  text("كأس الخليج 27", CX, 190 - (1 - kL) * 30, { font: font(700, 44), color: C.muted, alpha: kL, spacing: 2 });
+}
+
+// ---------- scoreboard bar ----------
+function scoreAt(t) { return GOALS.filter(g => t >= g.at + 0.45).length; }
+
+function scoreboard(t, cx, cy, s, alpha) {
+  if (alpha <= 0) return;
+  const w = 1000, h = 140;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(s, s);
+  ctx.globalAlpha *= alpha;
+  ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14;
+  ctx.fillStyle = "rgba(10,22,16,0.92)";
+  roundRect(-w / 2, -h / 2, w, h, 70); ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.lineWidth = 3; ctx.strokeStyle = "rgba(245,197,66,0.6)"; ctx.stroke();
+
+  // Iraq on the right (RTL reading order), UAE on the left
+  flagBadge(FLAG_IRQ, w / 2 - 75, 0, 48);
+  flagBadge(FLAG_UAE, -w / 2 + 75, 0, 48);
+  text("العراق", w / 2 - 150, 0, { font: font(900, 50), align: "right" });
+  text("الإمارات", -w / 2 + 150, 0, { font: font(900, 50), align: "left" });
+
+  // score box
+  ctx.fillStyle = C.gold;
+  roundRect(-130, -52, 260, 104, 22); ctx.fill();
+  const sc = scoreAt(t);
+  // bump the Iraq digit when it changes
+  const last = GOALS[sc - 1];
+  const bump = last ? 1 + 0.5 * Math.max(0, 1 - (t - last.at - 0.45) / 0.35) : 1;
+  ctx.save(); ctx.translate(65, 4); ctx.scale(bump, bump);
+  text(String(sc), 0, 0, { font: font(900, 86), color: C.bg, dir: "ltr" });
+  ctx.restore();
+  text("-", 0, 0, { font: font(900, 70), color: C.bg, dir: "ltr" });
+  text("0", -65, 4, { font: font(900, 86), color: C.bg, dir: "ltr" });
+  ctx.restore();
+}
+
+// ---------- goal net with bulge ----------
+function goalFrame(t, at, cx, cy, alpha) {
+  if (alpha <= 0) return;
+  const gw = 820, gh = 300;
+  const hit = prog(t, at + 0.42, 0.7);
+  const bulge = hit > 0 ? Math.sin(hit * Math.PI) * (1 - hit * 0.4) : 0;
+  const ix = cx + 170, iy = cy - 40; // impact point
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  const warp = (x, y) => {
+    const dx = x - ix, dy = y - iy, d2 = dx * dx + dy * dy;
+    const f = bulge * 60 * Math.exp(-d2 / 30000);
+    const d = Math.sqrt(d2) || 1;
+    return [x + (dx / d) * f, y + (dy / d) * f];
+  };
+  ctx.strokeStyle = "rgba(255,255,255,0.28)"; ctx.lineWidth = 2;
+  for (let x = cx - gw / 2; x <= cx + gw / 2; x += 34) {
+    ctx.beginPath();
+    for (let y = cy - gh; y <= cy; y += 10) { const [px, py] = warp(x, y); y === cy - gh ? ctx.moveTo(px, py) : ctx.lineTo(px, py); }
+    ctx.stroke();
+  }
+  for (let y = cy - gh; y <= cy; y += 34) {
+    ctx.beginPath();
+    for (let x = cx - gw / 2; x <= cx + gw / 2; x += 10) { const [px, py] = warp(x, y); x === cx - gw / 2 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); }
+    ctx.stroke();
+  }
+  // posts + crossbar
+  ctx.strokeStyle = C.white; ctx.lineWidth = 16; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(cx - gw / 2, cy + 6); ctx.lineTo(cx - gw / 2, cy - gh); ctx.lineTo(cx + gw / 2, cy - gh); ctx.lineTo(cx + gw / 2, cy + 6); ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- scene 3: the goals (7.3 - 13.9) ----------
+function scene3(t) {
+  if (t < 7.2 || t > 14.1) return;
+  const enter = eOutBack(prog(t, 7.25, 0.6));
+  const exit = eInCubic(prog(t, 13.5, 0.45));
+  scoreboard(t, CX, 120 - (1 - clamp(enter)) * 260 - exit * 260, 0.9, clamp(enter) * (1 - exit));
+
+  const goalY = 690;
+  const gEnter = eOutCubic(prog(t, 7.3, 0.5));
+  ctx.save();
+  ctx.globalAlpha = (1 - exit);
+  goalFrame(t, GOALS.findLast(g => t >= g.at - 0.1)?.at ?? 99, CX, goalY, gEnter);
+  ctx.restore();
+
+  GOALS.forEach((g, i) => {
+    const local = t - g.at;
+    const next = GOALS[i + 1]?.at ?? 13.5;
+    if (t < g.at - 0.1 || t > next + 0.2) return;
+    const out = eInCubic(prog(t, next - 0.25, 0.3));
+    const alpha = 1 - out;
+
+    // ball flies from the foreground into the net
+    const kb = clamp(local / 0.45);
+    if (local > -0.1 && local < 1.6) {
+      const startX = CX + (i - 1) * -420, startY = H + 120;
+      const endX = CX + 170, endY = goalY - 40;
+      const e = eOutCubic(kb);
+      const bx = lerp(startX, endX, e), by = lerp(startY, endY, e) - Math.sin(kb * Math.PI) * 160;
+      const settle = prog(local, 0.45, 0.8);
+      const r = lerp(120, 34, e);
+      ball(bx, by + eOutCubic(settle) * 30, r, local * 14 * (1 - settle * 0.8), (1 - out) * (1 - prog(local, 1.2, 0.3)));
+    }
+
+    // GOAL!
+    const kG = prog(t, g.at + 0.45, 0.5);
+    if (kG > 0) {
+      const s = lerp(2.4, 1, eOutCubic(kG));
+      ctx.save();
+      ctx.globalAlpha = clamp(kG * 3) * alpha;
+      ctx.translate(CX, 300 - out * 60); ctx.scale(s, s);
+      text("هدف!", 0, 0, { font: font(900, 160), color: C.gold, shadow: "rgba(245,197,66,0.6)" });
+      ctx.restore();
+    }
+
+    // scorer lower-third
+    const kN = eOutExpo(prog(t, g.at + 0.7, 0.7));
+    if (kN > 0) {
+      const pw = 980, ph = 190, py = 820;
+      const x = lerp(W + 40, CX + pw / 2, kN) + out * 300;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 40;
+      ctx.fillStyle = "rgba(10,22,16,0.94)";
+      roundRect(x - pw, py - ph / 2, pw, ph, 26); ctx.fill();
+      ctx.shadowColor = "transparent";
+      // Iraqi stripes on the leading (right) edge
+      [C.red, "#FFFFFF", C.black].forEach((c, j) => {
+        ctx.fillStyle = c; ctx.fillRect(x - 22, py - ph / 2 + 18 + j * ((ph - 36) / 3), 12, (ph - 36) / 3);
+      });
+      text(g.ord, x - 60, py - 46, { font: font(700, 36), color: C.gold, align: "right" });
+      text(g.name, x - 60, py + 26, { font: font(900, 84), color: C.white, align: "right" });
+      // big number on the left side of the panel
+      text(String(i + 1), x - pw + 110, py + 6, { font: font(900, 150), color: "rgba(247,247,242,0.10)", dir: "ltr" });
+      ball(x - pw + 110, py + 6, 38, t * 2);
+      ctx.restore();
+    }
+  });
+
+  GOALS.forEach(g => {
+    flash(t, g.at + 0.42, 0.35, "255,240,200", 0.7);
+    shockwave(t, g.at + 0.45, C.gold, CX + 170, goalY - 40, 900, 0.9, 12);
+    shockwave(t, g.at + 0.55, "#FFFFFF", CX + 170, goalY - 40, 1000, 1.0, 6);
+  });
+}
+
+// ---------- scene 4: final score + scorers (13.8 - 18.8) ----------
+function scene4(t) {
+  if (t < 13.8 || t > 19.0) return;
+  const exit = eInCubic(prog(t, 18.4, 0.45));
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  ctx.translate(0, -exit * 80);
+
+  const kH = eOutCubic(prog(t, 13.9, 0.6));
+  text("النتيجة النهائية", CX, 140 - (1 - kH) * 40, { font: font(700, 50), color: C.gold, alpha: kH, spacing: 1 });
+
+  // flags + big score
+  const kF = eOutBack(prog(t, 14.0, 0.7));
+  if (kF > 0) {
+    flagBadge(FLAG_IRQ, CX + 560, 340, 120 * kF);
+    flagBadge(FLAG_UAE, CX - 560, 340, 120 * kF);
+  }
+  const kNm = eOutCubic(prog(t, 14.3, 0.5));
+  text("العراق", CX + 560, 510, { font: font(900, 60), alpha: kNm });
+  text("الإمارات", CX - 560, 510, { font: font(900, 60), alpha: kNm });
+
+  const kS = eOutExpo(prog(t, 14.2, 0.9));
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 200, W, 300); ctx.clip();
+  const sy = 345 + (1 - kS) * 260;
+  text("3", CX + 190, sy, { font: font(900, 260), color: C.white, dir: "ltr" });
+  text("0", CX - 190, sy, { font: font(900, 260), color: C.muted, dir: "ltr" });
+  ctx.restore();
+  const kD = eOutCubic(prog(t, 14.5, 0.4));
+  ctx.fillStyle = C.gold; roundRect(CX - 40 * kD, 352, 80 * kD, 18, 9); ctx.fill();
+  shockwave(t, 14.45, C.gold, CX, 345, 800, 1.0, 10);
+
+  // scorers list
+  const kLn = eOutCubic(prog(t, 15.0, 0.6));
+  ctx.fillStyle = "rgba(245,197,66,0.5)";
+  roundRect(CX - 560 * kLn, 600, 1120 * kLn, 3, 2); ctx.fill();
+  text("هدّافو العراق", CX, 660, { font: font(700, 38), color: C.muted, alpha: kLn });
+
+  const cw = 520, gap = 40;
+  GOALS.forEach((g, i) => {
+    const k = eOutBack(prog(t, 15.3 + i * 0.22, 0.6));
+    if (k <= 0) return;
+    const x = CX + (1 - i) * (cw + gap); // right-to-left order
+    ctx.save();
+    ctx.translate(x, 800 + (1 - clamp(k)) * 80);
+    ctx.globalAlpha *= clamp(k);
+    ctx.fillStyle = "rgba(10,22,16,0.9)";
+    roundRect(-cw / 2, -75, cw, 150, 24); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = "rgba(245,197,66,0.35)"; ctx.stroke();
+    ball(cw / 2 - 70, 0, 34, t * 1.5 + i);
+    text(g.name, cw / 2 - 130, -6, { font: font(900, 56), align: "right" });
+    text(g.ord, cw / 2 - 130, 46, { font: font(700, 26), color: C.gold, align: "right" });
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ---------- scene 5: outro (18.7 - 22) ----------
+function scene5(t) {
+  if (t < 18.6) return;
+  beams(t, eOutCubic(prog(t, 18.7, 1.0)));
+  shockwave(t, 18.8, C.red, CX, 430, 900, 1.2, 10);
+  shockwave(t, 18.95, "#FFFFFF", CX, 430, 1000, 1.2, 6);
+
+  // big waving Iraqi flag
+  const kF = eOutBack(prog(t, 18.75, 0.8));
+  if (kF > 0) {
+    const fw = 540 * kF, fh = 360 * kF;
+    ctx.save();
+    ctx.shadowColor = "rgba(206,17,38,0.5)"; ctx.shadowBlur = 80;
+    ctx.fillStyle = "#000"; ctx.fillRect(CX - fw / 2, 380 - fh / 2, fw, fh);
+    ctx.restore();
+    wavingFlag(FLAG_IRQ, CX - fw / 2, 380 - fh / 2, fw, fh, t, 16);
+  }
+
+  const kT = eOutExpo(prog(t, 19.3, 0.9));
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 600, W, 170); ctx.clip();
+  text("أسود الرافدين", CX, 685 + (1 - kT) * 170, { font: font(900, 130), color: C.white, shadow: "rgba(245,197,66,0.35)" });
+  ctx.restore();
+
+  const kS = eOutCubic(prog(t, 19.9, 0.8));
+  text("فوز عراقي بثلاثية نظيفة على الإمارات", CX, 820 + (1 - kS) * 30, { font: font(700, 50), color: C.gold, alpha: kS });
+  const kL = eOutCubic(prog(t, 20.3, 0.7));
+  if (kL > 0) {
+    ctx.fillStyle = C.red; roundRect(CX - 330 - 140 * kL, 908, 140 * kL, 4, 2); ctx.fill();
+    ctx.fillStyle = C.green; roundRect(CX + 330, 908, 140 * kL, 4, 2); ctx.fill();
+    text("خليجي 27", CX, 910, { font: font(700, 36), color: C.muted, alpha: kL, spacing: 2 });
+  }
+}
+
+// ---------- master ----------
+function render(t) {
+  ctx.save();
+  drawBackground(t);
+  scene1(t);
+  scene2(t);
+  scene3(t);
+  scene4(t);
+  scene5(t);
+  stripeWipe(t, 3.0);
+  const fadeIn = 1 - prog(t, 0, 0.3);
+  const fadeOut = prog(t, DURATION - 0.8, 0.8);
+  const f = Math.max(fadeIn, fadeOut);
+  if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = Promise.all([400, 700, 900].flatMap(w => [
+  document.fonts.load(`${w} 50px Cairo`, "العراق"),
+  document.fonts.load(`${w} 50px Cairo`, "VS 27"),
+])).then(() => { buildFlags(); return true; });
+
+// live preview when opened directly in a browser
+if (!navigator.webdriver) {
+  const t0 = performance.now();
+  window.ready.then(() => {
+    const loop = now => { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Fashion Offer</title>
+<style>
+  @font-face { font-family: Ruqaa; font-weight: 700; src: url(../assets/fonts/aref-ruqaa-arabic-700-normal.woff2) format("woff2"); }
+  @font-face { font-family: Tajawal; font-weight: 500; src: url(../assets/fonts/tajawal-arabic-500-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Tajawal; font-weight: 800; src: url(../assets/fonts/tajawal-arabic-800-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Tajawal; font-weight: 500; src: url(../assets/fonts/tajawal-latin-500-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Tajawal; font-weight: 800; src: url(../assets/fonts/tajawal-latin-800-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Playfair; font-style: italic; font-weight: 700; src: url(../assets/fonts/playfair-display-latin-700-italic.woff2) format("woff2"); }
+  html, body { margin: 0; background: #1a1020; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080;
+const DURATION = 15;
+const C = {
+  lilac: "#C9A9C6", lilacDeep: "#8E5F8C", blush: "#F3E3EE", cream: "#F7EFE4", beige: "#D9C2A5",
+  gold: "#D4AF37", goldLight: "#F2D98B", ink: "#3B2340", wine: "#4A1530", night: "#1E1028", white: "#FFFDF8",
+};
+// Prices (Iraqi dinar)
+const HIJAB = 3000, SHIRT = 7000, OLD_SET = 7500, NEW_SET = 4500;
+// Where the garments sit on the cutout, as fractions of the image box
+const SPOT_HIJAB = [0.36, 0.50], SPOT_SHIRT = [0.55, 0.78];
+
+const ctx = document.getElementById("c").getContext("2d");
+const model = new Image();
+model.src = "../assets/model-cutout.png";
+// Talking-head frames (SadTalker, lip-synced to the voiceover), 30 fps from TALK_START.
+// Before/after the voice the first/last frame holds; with TALK_COUNT = 0 the still cutout is used.
+const TALK_START = 0.8, TALK_FPS = 30, TALK_COUNT = 402;
+const frameCache = new Map();
+let current = model;
+function loadFrame(i) {
+  if (!frameCache.has(i)) {
+    frameCache.set(i, new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im); im.onerror = rej;
+      im.src = `../assets/talking/f_${String(i).padStart(4, "0")}.webp`;
+    }));
+    for (const k of frameCache.keys()) if (Math.abs(k - i) > 6) frameCache.delete(k);
+  }
+  return frameCache.get(i);
+}
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOutBack = k => { const c1 = 2.0, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const fmt = n => Math.round(n).toLocaleString("en-US");
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+function mixHex(a, b, k) {
+  const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return `rgb(${x.map((v, i) => Math.round(lerp(v, y[i], k))).join(",")})`;
+}
+// in-out envelope: 0 before s, rises over din, holds, falls over dout ending at e
+const life = (t, s, e, din = 0.5, dout = 0.4) => Math.min(eOutCubic(prog(t, s, din)), 1 - eInCubic(prog(t, e - dout, dout)));
+
+function text(str, x, y, o = {}) {
+  ctx.save();
+  ctx.direction = o.dir || "rtl";
+  ctx.font = o.font;
+  ctx.textAlign = o.align || "right";
+  ctx.textBaseline = "middle";
+  ctx.globalAlpha *= o.alpha ?? 1;
+  if (o.shadow) { ctx.shadowColor = o.shadow; ctx.shadowBlur = o.blur ?? 24; }
+  if (o.letter) ctx.letterSpacing = o.letter;
+  ctx.fillStyle = o.color || C.white;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// ---------- background: three palettes crossfading across the 15 s ----------
+const SCENES = [
+  { a: "#F6E6F1", b: "#C9A9C6", ink: C.ink, accent: C.lilacDeep },   // soft lilac
+  { a: "#FBF3E6", b: "#D9B98C", ink: C.ink, accent: "#9C6B2F" },     // champagne gold
+  { a: "#4A1530", b: "#160A1E", ink: C.white, accent: C.gold },      // night wine
+];
+function sceneMix(t) {
+  const k1 = eInOutCubic(prog(t, 4.0, 1.0)), k2 = eInOutCubic(prog(t, 6.5, 0.8));
+  const pick = key => k2 > 0 ? mixHex(SCENES[1][key], SCENES[2][key], k2) : mixHex(SCENES[0][key], SCENES[1][key], k1);
+  return { a: pick("a"), b: pick("b"), ink: pick("ink"), accent: pick("accent"), dark: k2 };
+}
+
+const sparkles = (() => { const r = rng(7); return Array.from({ length: 70 }, () => ({ x: r() * W, y: r() * H, s: 1 + r() * 3, sp: 10 + r() * 30, ph: r() * 6.28 })); })();
+
+function drawBackground(t, S) {
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, S.a); g.addColorStop(1, S.b);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // soft light sweep
+  const sx = lerp(-600, W + 600, (t % 5) / 5);
+  const sg = ctx.createLinearGradient(sx - 300, 0, sx + 300, H);
+  sg.addColorStop(0, "rgba(255,255,255,0)"); sg.addColorStop(0.5, `rgba(255,255,255,${0.10 - S.dark * 0.06})`); sg.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = sg; ctx.fillRect(0, 0, W, H);
+  // drifting gold dust (stronger in the final dark scene)
+  ctx.save();
+  for (const p of sparkles) {
+    const y = (p.y - t * p.sp + H * 4) % H;
+    ctx.globalAlpha = (0.25 + 0.55 * S.dark) * (0.5 + 0.5 * Math.sin(t * 3 + p.ph));
+    ctx.fillStyle = S.dark > 0.5 ? C.goldLight : "#ffffff";
+    ctx.beginPath(); ctx.arc(p.x, y, p.s, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ---------- decorative shapes (full & outline circles / squares) ----------
+const SHAPES = [
+  { kind: "circle", fill: true,  x: 140,  y: 150, r: 70,  in: 0.10, col: "accent", dx: -300, dy: -200 },
+  { kind: "circle", fill: false, x: 260,  y: 920, r: 95,  in: 0.25, col: "accent", dx: -300, dy: 300 },
+  { kind: "square", fill: true,  x: 860,  y: 110, r: 38,  in: 0.35, col: "gold",   dx: 0,    dy: -250, rot: 0.6 },
+  { kind: "square", fill: false, x: 70,   y: 560, r: 46,  in: 0.45, col: "gold",   dx: -250, dy: 0,    rot: 0.3 },
+  { kind: "circle", fill: false, x: 1830, y: 120, r: 60,  in: 0.20, col: "gold",   dx: 300,  dy: -200 },
+  { kind: "square", fill: true,  x: 1810, y: 960, r: 44,  in: 0.40, col: "accent", dx: 300,  dy: 300,  rot: 0.8 },
+  { kind: "circle", fill: true,  x: 960,  y: 990, r: 18,  in: 0.55, col: "gold",   dx: 0,    dy: 250 },
+  { kind: "square", fill: false, x: 1080, y: 520, r: 26,  in: 0.60, col: "accent", dx: 250,  dy: 0,    rot: 0.2 },
+  { kind: "circle", fill: false, x: 560,  y: 110, r: 26,  in: 0.50, col: "accent", dx: 0,    dy: -250 },
+];
+function drawShapes(t, S) {
+  const out = eInCubic(prog(t, 14.1, 0.6));
+  for (const [i, s] of SHAPES.entries()) {
+    const k = eOutBack(prog(t, s.in, 0.7));
+    if (k <= 0) continue;
+    const bob = Math.sin(t * 1.4 + i) * 10;
+    const x = s.x + s.dx * (1 - k) + s.dx * out, y = s.y + s.dy * (1 - k) + s.dy * out + bob;
+    const col = s.col === "gold" ? C.gold : S.accent;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((s.rot || 0) + t * 0.35 * (i % 2 ? 1 : -1));
+    ctx.scale(k, k);
+    ctx.globalAlpha = (s.fill ? 0.55 : 0.85) * (1 - out);
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    if (s.kind === "circle") ctx.arc(0, 0, s.r, 0, Math.PI * 2);
+    else ctx.roundRect(-s.r, -s.r, s.r * 2, s.r * 2, s.r * 0.22);
+    if (s.fill) { ctx.fillStyle = col; ctx.fill(); } else { ctx.strokeStyle = col; ctx.stroke(); }
+    ctx.restore();
+  }
+}
+
+// ---------- model (right side) ----------
+const BOX = { x: 1020, y: 90, w: 820, h: 900 };
+function modelRect(t) {
+  const k = eOutExpo(prog(t, 0.5, 1.1));
+  const zoom = lerp(1.0, 1.07, t / DURATION);
+  const size = 900 * zoom;
+  const cx = BOX.x + BOX.w / 2 + (1 - k) * 700;
+  return { x: cx - size / 2, y: BOX.y + BOX.h - size + 10, s: size, k };
+}
+function drawModel(t, S) {
+  const m = modelRect(t);
+  if (m.k <= 0) return;
+  ctx.save();
+  // arch frame behind her
+  const ax = BOX.x + BOX.w / 2 + (1 - m.k) * 700, aw = 600, top = BOX.y + 30;
+  ctx.globalAlpha = m.k;
+  ctx.beginPath();
+  ctx.moveTo(ax - aw / 2, BOX.y + BOX.h);
+  ctx.lineTo(ax - aw / 2, top + aw / 2);
+  ctx.arc(ax, top + aw / 2, aw / 2, Math.PI, 0);
+  ctx.lineTo(ax + aw / 2, BOX.y + BOX.h);
+  ctx.closePath();
+  const ag = ctx.createLinearGradient(0, top, 0, BOX.y + BOX.h);
+  ag.addColorStop(0, `rgba(255,255,255,${0.55 - S.dark * 0.4})`);
+  ag.addColorStop(1, `rgba(255,255,255,${0.15 - S.dark * 0.1})`);
+  ctx.fillStyle = ag; ctx.fill();
+  ctx.lineWidth = 4; ctx.strokeStyle = C.gold; ctx.stroke();
+  // second offset outline arch
+  ctx.save();
+  ctx.translate(26, 26); ctx.globalAlpha = 0.6 * m.k;
+  ctx.lineWidth = 2; ctx.strokeStyle = S.accent; ctx.stroke();
+  ctx.restore();
+  // the cutout itself, with a soft drop shadow
+  ctx.shadowColor = "rgba(40,10,40,0.35)"; ctx.shadowBlur = 40; ctx.shadowOffsetX = -14; ctx.shadowOffsetY = 10;
+  // gentle sway + breathing around her feet so the body moves along with the talking face
+  const px = m.x + m.s / 2, py = m.y + m.s;
+  ctx.translate(px, py + Math.sin(t * 2.1) * 3);
+  ctx.rotate(Math.sin(t * 1.25) * 0.012);
+  ctx.scale(1 + Math.sin(t * 2.1) * 0.005, 1 + Math.sin(t * 2.1 + 0.6) * 0.008);
+  ctx.translate(-px, -py);
+  if (current.complete && current.naturalWidth) ctx.drawImage(current, m.x, m.y, m.s, m.s);
+  ctx.restore();
+}
+
+// pulsing glow ring + leader line pointing at a garment
+function drawSpot(t, spot, s, e, S, label) {
+  const a = life(t, s, e, 0.5, 0.4);
+  if (a <= 0) return;
+  const m = modelRect(t);
+  const x = m.x + spot[0] * m.s, y = m.y + spot[1] * m.s;
+  ctx.save();
+  ctx.globalAlpha = a;
+  for (let i = 0; i < 2; i++) {
+    const ph = ((t - s) * 0.9 + i * 0.5) % 1;
+    ctx.beginPath(); ctx.arc(x, y, 30 + ph * 70, 0, 7);
+    ctx.strokeStyle = C.gold; ctx.lineWidth = 4 * (1 - ph); ctx.globalAlpha = a * (1 - ph); ctx.stroke();
+  }
+  ctx.globalAlpha = a;
+  ctx.beginPath(); ctx.arc(x, y, 14, 0, 7); ctx.fillStyle = C.gold; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, 26, 0, 7); ctx.strokeStyle = C.white; ctx.lineWidth = 3; ctx.stroke();
+  // leader line to a tag
+  const k = eOutCubic(prog(t, s + 0.2, 0.5));
+  const tx = x - 190 * k, ty = y - 90 * k;
+  ctx.beginPath(); ctx.moveTo(x - 20, y - 10); ctx.lineTo(tx, ty); ctx.strokeStyle = C.gold; ctx.lineWidth = 3; ctx.stroke();
+  if (k > 0.6) {
+    ctx.font = "800 30px Tajawal"; const w = ctx.measureText(label).width + 40;
+    ctx.globalAlpha = a * prog(k, 0.6, 0.4);
+    ctx.beginPath(); ctx.roundRect(tx - w, ty - 26, w, 52, 26); ctx.fillStyle = C.gold; ctx.fill();
+    text(label, tx - 20, ty + 2, { font: "800 30px Tajawal", color: C.night, align: "right" });
+  }
+  ctx.restore();
+}
+
+// ---------- left-side graphics ----------
+const RIGHT = 960; // right edge of the text column (RTL anchor)
+
+function drawHeadline(t, S) {
+  const a = life(t, 0.7, 2.35, 0.4, 0.35);
+  if (a <= 0) return;
+  // store name eyebrow
+  const e = eOutCubic(prog(t, 0.7, 0.5));
+  text("JAKOOK SHEIN", RIGHT - (1 - e) * 80, 250, { font: "italic 700 40px Playfair", dir: "ltr", align: "right", color: S.accent, alpha: a, letter: "8px" });
+  // headline revealed right-to-left through a growing clip
+  const r = eOutCubic(prog(t, 0.8, 0.8));
+  ctx.save();
+  ctx.beginPath(); ctx.rect(RIGHT - 900 * r, 270, 900 * r + 20, 260); ctx.clip();
+  text("تشكيلة الأناقة", RIGHT, 390, { font: "700 150px Ruqaa", color: S.ink, alpha: a, shadow: "rgba(255,255,255,0.5)", blur: 20 });
+  ctx.restore();
+  // gold underline grows from the right
+  const u = eOutCubic(prog(t, 1.2, 0.6));
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = C.gold; ctx.fillRect(RIGHT - 520 * u, 505, 520 * u, 6);
+  ctx.beginPath(); ctx.arc(RIGHT - 520 * u - 12, 508, 8 * u, 0, 7); ctx.fill();
+  ctx.restore();
+  text("حجاب وقميص بإطلالة راقية تليق بكِ", RIGHT, 580, { font: "500 46px Tajawal", color: S.ink, alpha: a * eOutCubic(prog(t, 1.4, 0.5)) });
+}
+
+// glass price card; price counts up to its value
+function drawCard(t, s, e, y, title, sub, price, S) {
+  const a = life(t, s, e, 0.6, 0.45);
+  if (a <= 0) return;
+  const k = eOutBack(prog(t, s, 0.75));
+  const x = lerp(-800, 120, k);
+  const w = 840, h = 330;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.shadowColor = "rgba(60,20,60,0.25)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 36);
+  ctx.fillStyle = "rgba(255,255,255,0.55)"; ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.stroke();
+  // accent bar on the right edge
+  ctx.beginPath(); ctx.roundRect(x + w - 18, y + 40, 8, h - 80, 4); ctx.fillStyle = C.gold; ctx.fill();
+  ctx.restore();
+  const rx = x + w - 60;
+  text(title, rx, y + 85, { font: "700 78px Ruqaa", color: C.ink, alpha: a });
+  text(sub, rx, y + 160, { font: "500 38px Tajawal", color: "#6E5470", alpha: a * eOutCubic(prog(t, s + 0.35, 0.5)) });
+  // price pill
+  const c = eOutCubic(prog(t, s + 0.6, 1.1));
+  const shown = Math.round(price * c / 50) * 50;
+  ctx.save(); ctx.globalAlpha = a * clamp(c * 3);
+  const pw = 520, ph = 96, px = rx - pw, py = y + 200;
+  const pg = ctx.createLinearGradient(px, 0, px + pw, 0);
+  pg.addColorStop(0, C.lilacDeep); pg.addColorStop(1, C.ink);
+  ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 48); ctx.fillStyle = pg; ctx.fill();
+  ctx.restore();
+  text(fmt(shown), rx - 40, py + ph / 2 + 4, { font: "800 66px Tajawal", color: C.goldLight, alpha: a * clamp(c * 3), dir: "ltr", align: "right" });
+  text("دينار", rx - pw + 40, py + ph / 2 + 2, { font: "800 40px Tajawal", color: C.white, alpha: a * clamp(c * 3), align: "left" });
+}
+
+function drawSection(t, S) {
+  // timed to the voiceover: hijab price spoken ~3.0–4.2 s, shirt price ~5.2–6.8 s
+  drawCard(t, 2.1, 4.7, 300, "الحجاب", "شيفون ناعم بلون الليلك", HIJAB, S);
+  drawCard(t, 4.3, 7.0, 300, "القميص", "قماش فاخر بنقشة أنيقة", SHIRT, S);
+  const ta = life(t, 2.0, 7.0, 0.5, 0.4);
+  text("قائمة الأسعار", RIGHT, 210, { font: "700 72px Ruqaa", color: S.ink, alpha: ta });
+  ctx.save(); ctx.globalAlpha = ta; ctx.fillStyle = C.gold; ctx.fillRect(RIGHT - 260 * ta, 258, 260 * ta, 4); ctx.restore();
+}
+
+// ---------- final offer ----------
+function drawOffer(t, S) {
+  const a = Math.min(eOutCubic(prog(t, 6.9, 0.5)), 1 - eInCubic(prog(t, 14.4, 0.45)));
+  if (a <= 0) return;
+  // 50% badge spins in
+  const b = eOutBack(prog(t, 7.0, 0.8));
+  ctx.save();
+  ctx.translate(215, 300); ctx.rotate((1 - b) * -2.5 - 0.15); ctx.scale(b, b);
+  ctx.globalAlpha = a;
+  const spikes = 18;
+  ctx.beginPath();
+  for (let i = 0; i < spikes * 2; i++) {
+    const r = i % 2 ? 150 : 170, ang = (i / (spikes * 2)) * Math.PI * 2 + t * 0.3;
+    ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+  }
+  ctx.closePath();
+  const bg = ctx.createRadialGradient(0, 0, 10, 0, 0, 170);
+  bg.addColorStop(0, C.goldLight); bg.addColorStop(1, C.gold);
+  ctx.fillStyle = bg; ctx.shadowColor = "rgba(212,175,55,0.7)"; ctx.shadowBlur = 40; ctx.fill();
+  ctx.shadowBlur = 0;
+  text("خصم", 0, -55, { font: "800 44px Tajawal", color: C.night, align: "center" });
+  text("50%", 0, 20, { font: "800 104px Tajawal", color: C.wine, align: "center", dir: "ltr" });
+  ctx.restore();
+
+  text("عرض الطقم الكامل", RIGHT, 250, { font: "700 86px Ruqaa", color: C.white, alpha: a * eOutCubic(prog(t, 7.2, 0.5)), shadow: "rgba(212,175,55,0.5)" });
+  text("حجاب + قميص", RIGHT, 345, { font: "500 44px Tajawal", color: C.goldLight, alpha: a * eOutCubic(prog(t, 7.4, 0.5)) });
+
+  // old price with animated strike-through
+  const o = eOutCubic(prog(t, 8.0, 0.5));
+  text(`${fmt(OLD_SET)} دينار`, RIGHT, 440, { font: "800 64px Tajawal", color: "rgba(255,255,255,0.65)", alpha: a * o });
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.font = "800 64px Tajawal"; const ow = ctx.measureText(`${fmt(OLD_SET)} دينار`).width;
+  const sk = eInOutCubic(prog(t, 8.7, 0.4));
+  ctx.strokeStyle = "#FF5A7A"; ctx.lineWidth = 7; ctx.lineCap = "round";
+  if (sk > 0) { ctx.beginPath(); ctx.moveTo(RIGHT, 452); ctx.lineTo(RIGHT - ow * sk, 428); ctx.stroke(); }
+  ctx.restore();
+
+  // new price pops
+  const n = eOutBack(prog(t, 9.8, 0.6));
+  if (n > 0) {
+    ctx.save();
+    ctx.translate(RIGHT, 580); ctx.scale(n, n);
+    ctx.globalAlpha = a;
+    text(fmt(NEW_SET), -260, 0, { font: "800 170px Tajawal", color: C.goldLight, dir: "ltr", align: "right", shadow: "rgba(212,175,55,0.8)", blur: 30 });
+    text("دينار", 0, 20, { font: "800 64px Tajawal", color: C.white, align: "right" });
+    text("فقط", 0, -60, { font: "700 52px Ruqaa", color: C.goldLight, align: "right" });
+    ctx.restore();
+  }
+
+  // CTA button with a shine pass
+  const c = eOutCubic(prog(t, 12.6, 0.5));
+  if (c > 0) {
+    const bw = 520, bh = 110, bx = RIGHT - bw, by = 740 + (1 - c) * 60;
+    ctx.save(); ctx.globalAlpha = a * c;
+    const pulse = 1 + Math.sin(t * 8) * 0.015;
+    ctx.translate(bx + bw / 2, by + bh / 2); ctx.scale(pulse, pulse); ctx.translate(-(bx + bw / 2), -(by + bh / 2));
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 55);
+    const gg = ctx.createLinearGradient(bx, 0, bx + bw, 0); gg.addColorStop(0, C.gold); gg.addColorStop(1, C.goldLight);
+    ctx.fillStyle = gg; ctx.shadowColor = "rgba(212,175,55,0.6)"; ctx.shadowBlur = 30; ctx.fill();
+    ctx.clip();
+    const shx = lerp(bx - 200, bx + bw + 200, prog(t, 13.0, 0.8));
+    const shg = ctx.createLinearGradient(shx - 80, 0, shx + 80, 0);
+    shg.addColorStop(0, "rgba(255,255,255,0)"); shg.addColorStop(0.5, "rgba(255,255,255,0.7)"); shg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = shg; ctx.fillRect(bx, by, bw, bh);
+    ctx.restore();
+    text("اطلبيه الآن", bx + bw / 2, by + bh / 2 + 4, { font: "800 56px Tajawal", color: C.night, align: "center", alpha: a * c });
+  }
+  // store signature
+  text("JAKOOK SHEIN  •  جكوك شي إن", RIGHT, 940, { font: "800 40px Tajawal", color: C.goldLight, alpha: a * eOutCubic(prog(t, 13.0, 0.5)), letter: "2px" });
+}
+
+// final fade to brand
+function drawOutro(t) {
+  const k = prog(t, 14.4, 0.5);
+  if (k <= 0) return;
+  ctx.save(); ctx.globalAlpha = eInOutCubic(k); ctx.fillStyle = C.night; ctx.fillRect(0, 0, W, H); ctx.restore();
+  text("جكوك شي إن", W / 2, H / 2 - 30, { font: "700 140px Ruqaa", color: C.goldLight, align: "center", alpha: eOutCubic(prog(t, 14.5, 0.35)) });
+  text("JAKOOK SHEIN", W / 2, H / 2 + 90, { font: "italic 700 44px Playfair", color: C.white, align: "center", dir: "ltr", letter: "10px", alpha: eOutCubic(prog(t, 14.6, 0.3)) });
+}
+
+async function render(t) {
+  if (TALK_COUNT) current = await loadFrame(clamp(Math.floor((t - TALK_START) * TALK_FPS), 0, TALK_COUNT - 1));
+  const S = sceneMix(t);
+  ctx.clearRect(0, 0, W, H);
+  drawBackground(t, S);
+  drawShapes(t, S);
+  drawModel(t, S);
+  drawSpot(t, SPOT_HIJAB, 2.2, 4.6, S, "الحجاب");
+  drawSpot(t, SPOT_SHIRT, 4.5, 6.9, S, "القميص");
+  drawHeadline(t, S);
+  drawSection(t, S);
+  drawOffer(t, S);
+  drawOutro(t);
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = Promise.all([
+  document.fonts.load("700 40px Ruqaa", "أ"), document.fonts.load("500 40px Tajawal", "أ1"),
+  document.fonts.load("800 40px Tajawal", "أ1"), document.fonts.load("italic 700 40px Playfair", "A"),
+  new Promise(r => { if (model.complete) r(); else model.onload = r; }),
+]).then(() => render(0));
+</script>
+</body>
+</html>

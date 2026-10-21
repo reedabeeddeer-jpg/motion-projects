@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>ChatGPT vs Claude</title>
+<style>
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: Cairo; font-weight: 400; src: url(../assets/fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  @font-face { font-family: Cairo; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022; }
+  html, body { margin: 0; background: #0B0F1F; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const DURATION = 25;
+const C = {
+  bg: "#0B0F1F", card: "#151B33", white: "#F5F7FF", muted: "#8A93B8",
+  gpt: "#10A37F", claude: "#D97757", gold: "#FFC145", violet: "#7B61FF",
+};
+// ChatGPT sits on the right (read first in RTL), Claude on the left.
+const SIDES = {
+  gpt: { name: "ChatGPT", color: C.gpt, x: CX + 430, dir: 1, mono: "G" },
+  claude: { name: "Claude", color: C.claude, x: CX - 430, dir: -1, mono: "C" },
+};
+// Rough, use-case based verdicts; kept deliberately balanced.
+const ROUNDS = [
+  { title: "الكتابة والأسلوب", gpt: "سريع ومتنوع الأساليب", claude: "أسلوب طبيعي ونصوص متماسكة", win: "claude" },
+  { title: "البرمجة", gpt: "Codex ومساعد برمجي", claude: "Claude Code ووكلاء برمجة", win: "tie" },
+  { title: "الصور والصوت", gpt: "توليد صور ومحادثة صوتية", claude: "يحلل الصور ولا يولّدها", win: "gpt" },
+  { title: "الملفات الطويلة", gpt: "يدعم الملفات والبحث", claude: "يقرأ مستندات ضخمة دفعة واحدة", win: "claude" },
+  { title: "التطبيقات والتكامل", gpt: "متجر GPTs ومنظومة واسعة", claude: "MCP • Artifacts • Projects", win: "gpt" },
+];
+const ROUND_START = 7.4, ROUND_LEN = 2.2;
+const ctx = document.getElementById("c").getContext("2d");
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOutCubic = k => 1 - Math.pow(1 - k, 3);
+const eInCubic = k => k * k * k;
+const eInOutCubic = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eOutExpo = k => k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+const eOutBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const font = (w, s) => `${w} ${s}px Cairo`;
+const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+
+function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+
+function text(str, x, y, opts = {}) {
+  ctx.save();
+  ctx.direction = opts.dir || "rtl";
+  ctx.font = opts.font || font(700, 60);
+  ctx.textAlign = opts.align || "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = opts.color || C.white;
+  ctx.globalAlpha *= opts.alpha ?? 1;
+  if (opts.spacing) ctx.letterSpacing = `${opts.spacing}px`;
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+function check(x, y, s, color, k = 1) {
+  // check mark drawn as a stroke that "writes" itself in
+  if (k <= 0) return;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = color; ctx.lineWidth = s * 0.18; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  const pts = [[-0.45, 0.02], [-0.12, 0.33], [0.48, -0.32]];
+  const l1 = Math.hypot(0.33, 0.31), l2 = Math.hypot(0.6, 0.65), d = k * (l1 + l2);
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0] * s, pts[0][1] * s);
+  if (d <= l1) ctx.lineTo(lerp(pts[0][0], pts[1][0], d / l1) * s, lerp(pts[0][1], pts[1][1], d / l1) * s);
+  else {
+    ctx.lineTo(pts[1][0] * s, pts[1][1] * s);
+    const q = (d - l1) / l2;
+    ctx.lineTo(lerp(pts[1][0], pts[2][0], q) * s, lerp(pts[1][1], pts[2][1], q) * s);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- background ----------
+const particles = (() => {
+  const r = rng(11); const out = [];
+  for (let i = 0; i < 70; i++) out.push({ x: r() * W, y: r() * H, s: 1 + r() * 2.5, v: 8 + r() * 25, p: r() * Math.PI * 2 });
+  return out;
+})();
+
+function drawBackground(t) {
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+  // two brand-coloured glows, one per side, slowly breathing
+  for (const [key, ph] of [["gpt", 0], ["claude", 1.7]]) {
+    const s = SIDES[key];
+    const r = 900 + Math.sin(t * 0.9 + ph) * 60;
+    const g = ctx.createRadialGradient(s.x + s.dir * 200, CY, 40, s.x + s.dir * 200, CY, r);
+    g.addColorStop(0, hexA(s.color, 0.13));
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+  // diagonal split line through the centre
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(0.18);
+  const lg = ctx.createLinearGradient(0, -H, 0, H);
+  lg.addColorStop(0, "rgba(245,247,255,0)");
+  lg.addColorStop(0.5, "rgba(245,247,255,0.07)");
+  lg.addColorStop(1, "rgba(245,247,255,0)");
+  ctx.fillStyle = lg;
+  ctx.fillRect(-1.5, -H, 3, H * 2);
+  ctx.restore();
+
+  for (const p of particles) {
+    const y = (p.y - t * p.v + H) % H;
+    const a = 0.12 + 0.18 * Math.sin(t * 1.5 + p.p);
+    ctx.fillStyle = `rgba(245,247,255,${a})`;
+    ctx.beginPath(); ctx.arc(p.x, y, p.s, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function shockwave(t, start, color, x = CX, y = CY, maxR = 520, dur = 1.1, width = 6) {
+  const k = prog(t, start, dur);
+  if (k <= 0 || k >= 1) return;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 1 - k;
+  ctx.lineWidth = width * (1 - k) + 1;
+  ctx.beginPath(); ctx.arc(x, y, eOutCubic(k) * maxR, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+function flash(t, start, dur = 0.35) {
+  const k = prog(t, start, dur);
+  if (k <= 0 || k >= 1) return;
+  ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - k)})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// split wipe: two colour panels sweep in from opposite sides and out again
+function splitWipe(t, start) {
+  const kIn = eInOutCubic(prog(t, start, 0.45));
+  const kOut = eInOutCubic(prog(t, start + 0.45, 0.45));
+  if (kIn <= 0 || kOut >= 1) return;
+  const half = W / 2 + 120;
+  ctx.save();
+  // right panel (ChatGPT) enters from the right, leaves to the left
+  ctx.fillStyle = C.gpt;
+  const rx = lerp(W, CX - 60, kIn) - kOut * (W + 240);
+  ctx.beginPath(); ctx.moveTo(rx + 120, 0); ctx.lineTo(rx + half + 2000, 0); ctx.lineTo(rx + half + 2000, H); ctx.lineTo(rx - 60, H); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = C.claude;
+  const lx = lerp(0, CX + 60, kIn) + kOut * (W + 240);
+  ctx.beginPath(); ctx.moveTo(lx + 60, 0); ctx.lineTo(lx - half - 2000, 0); ctx.lineTo(lx - half - 2000, H); ctx.lineTo(lx - 120, H); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// monogram badge standing in for each assistant (no official logos)
+function badge(key, x, y, r, t, alpha = 1, spin = 0) {
+  const s = SIDES[key];
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha *= alpha;
+  // orbiting ring
+  ctx.save();
+  ctx.rotate(t * 0.8 * s.dir + spin);
+  ctx.strokeStyle = hexA(s.color, 0.55); ctx.lineWidth = 4; ctx.setLineDash([r * 0.5, r * 0.25]);
+  ctx.beginPath(); ctx.arc(0, 0, r * 1.22, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  const g = ctx.createLinearGradient(-r, -r, r, r);
+  g.addColorStop(0, s.color); g.addColorStop(1, hexA(s.color, 0.7));
+  ctx.shadowColor = hexA(s.color, 0.6); ctx.shadowBlur = r * 0.6;
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.rotate(spin);
+  text(s.mono, 0, r * 0.06, { font: font(900, r * 1.15), color: C.white, dir: "ltr" });
+  ctx.restore();
+}
+
+// ---------- scene 1: versus intro (0 - 3.6) ----------
+function scene1(t) {
+  if (t > 3.7) return;
+  const exit = eInCubic(prog(t, 3.0, 0.5));
+  ctx.save();
+  ctx.globalAlpha = 1 - exit;
+  ctx.translate(CX, CY); ctx.scale(1 + exit * 0.25, 1 + exit * 0.25); ctx.translate(-CX, -CY);
+
+  // badges fly in, collide at the centre, recoil to their sides
+  const kIn = eInCubic(prog(t, 0.1, 0.75));
+  const kBack = eOutBack(prog(t, 0.85, 0.7));
+  for (const key of ["gpt", "claude"]) {
+    const s = SIDES[key];
+    const from = CX + s.dir * 1300, hit = CX + s.dir * 150;
+    const x = t < 0.85 ? lerp(from, hit, kIn) : lerp(hit, s.x, kBack);
+    const r = 130;
+    if (t > 0.1) badge(key, x, CY - 40, r, t, 1, (1 - kIn) * 4 * s.dir);
+
+    const kn = eOutCubic(prog(t, 1.35, 0.5));
+    if (kn > 0) text(s.name, s.x, CY + 175 + (1 - kn) * 40, { font: font(900, 76), color: C.white, alpha: kn, dir: "ltr" });
+    const kc = eOutCubic(prog(t, 1.55, 0.5));
+    if (kc > 0) text(key === "gpt" ? "OpenAI" : "Anthropic", s.x, CY + 250, { font: font(700, 34), color: s.color, alpha: kc, dir: "ltr", spacing: 4 });
+  }
+  shockwave(t, 0.85, C.white, CX, CY - 40, 600, 0.9, 10);
+  shockwave(t, 0.95, C.gpt, CX, CY - 40, 760);
+  shockwave(t, 1.05, C.claude, CX, CY - 40, 880);
+
+  // VS slams down
+  const kv = prog(t, 0.95, 0.4);
+  if (kv > 0) {
+    const sc = lerp(3.2, 1, eOutCubic(kv));
+    const shake = (1 - prog(t, 1.35, 0.35)) * (kv >= 1 ? Math.sin(t * 90) * 10 : 0);
+    ctx.save();
+    ctx.translate(CX + shake, CY - 40);
+    ctx.scale(sc, sc);
+    ctx.globalAlpha *= clamp(kv * 3);
+    ctx.fillStyle = C.gold;
+    ctx.beginPath(); ctx.arc(0, 0, 78, 0, Math.PI * 2); ctx.fill();
+    text("VS", 0, 6, { font: font(900, 78), color: C.bg, dir: "ltr" });
+    ctx.restore();
+  }
+
+  // heading
+  const kh = eOutExpo(prog(t, 1.7, 0.8));
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 90, W, 140); ctx.clip();
+  text("مقارنة سريعة", CX, 160 + (1 - kh) * 140, { font: font(900, 84), color: C.white });
+  ctx.restore();
+  ctx.restore();
+}
+
+// ---------- scene 2: profile cards (3.6 - 7.4) ----------
+const PROFILES = {
+  gpt: [["الشركة", "OpenAI"], ["الإطلاق", "2022"], ["يشتهر بـ", "المحادثة والصور"]],
+  claude: [["الشركة", "Anthropic"], ["الإطلاق", "2023"], ["يشتهر بـ", "الكتابة والبرمجة"]],
+};
+function scene2(t) {
+  if (t < 3.6 || t > 7.5) return;
+  const kh = eOutCubic(prog(t, 3.75, 0.5)) * (1 - eInCubic(prog(t, 6.85, 0.4)));
+  text("تعرّف على المتنافسين", CX, 140 - (1 - kh) * 50, { font: font(900, 66), alpha: kh });
+
+  const cw = 680, ch = 600, cy = 590;
+  ["gpt", "claude"].forEach((key, i) => {
+    const s = SIDES[key];
+    const kin = eOutExpo(prog(t, 3.75 + i * 0.15, 0.9));
+    const kout = eInCubic(prog(t, 6.9 + i * 0.06, 0.45));
+    if (kin <= 0 || kout >= 1) return;
+    const x = s.x + s.dir * ((1 - kin) * 1100 + kout * 1100);
+    ctx.save();
+    ctx.translate(x, cy);
+    ctx.shadowColor = "rgba(0,0,0,0.45)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20;
+    ctx.fillStyle = C.card;
+    roundRect(-cw / 2, -ch / 2, cw, ch, 40); ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.strokeStyle = hexA(s.color, 0.5); ctx.lineWidth = 2; ctx.stroke();
+    ctx.save(); roundRect(-cw / 2, -ch / 2, cw, ch, 40); ctx.clip();
+    ctx.fillStyle = s.color; ctx.fillRect(-cw / 2, -ch / 2, cw, 12);
+    ctx.restore();
+
+    badge(key, 0, -ch / 2 + 120, 62, t, eOutBack(prog(t, 4.2 + i * 0.15, 0.5)));
+    text(s.name, 0, -ch / 2 + 245, { font: font(900, 64), dir: "ltr" });
+
+    PROFILES[key].forEach(([label, val], j) => {
+      const kr = eOutCubic(prog(t, 4.6 + i * 0.15 + j * 0.18, 0.5));
+      if (kr <= 0) return;
+      const ry = -ch / 2 + 350 + j * 76;
+      ctx.save();
+      ctx.globalAlpha *= kr;
+      ctx.translate((1 - kr) * 60 * s.dir, 0);
+      ctx.fillStyle = "rgba(245,247,255,0.05)";
+      roundRect(-cw / 2 + 40, ry - 30, cw - 80, 60, 16); ctx.fill();
+      text(label, cw / 2 - 70, ry, { font: font(700, 30), color: C.muted, align: "right" });
+      text(val, -cw / 2 + 70, ry, { font: font(700, 32), color: s.color, align: "left" });
+      ctx.restore();
+    });
+    ctx.restore();
+  });
+}
+
+// ---------- scene 3: rounds (7.4 - 18.4) ----------
+function scoreAt(t) {
+  const sc = { gpt: 0, claude: 0 };
+  ROUNDS.forEach((r, i) => {
+    if (t >= ROUND_START + i * ROUND_LEN + 1.05 && r.win !== "tie") sc[r.win]++;
+  });
+  return sc;
+}
+
+function scene3(t) {
+  const end = ROUND_START + ROUNDS.length * ROUND_LEN;
+  if (t < ROUND_START - 0.1 || t > end + 0.4) return;
+  const kAll = eOutCubic(prog(t, ROUND_START, 0.4)) * (1 - eInCubic(prog(t, end - 0.2, 0.45)));
+
+  // progress dots (RTL: round 1 on the right)
+  ROUNDS.forEach((_, i) => {
+    const x = CX + 120 - i * 60;
+    const active = t >= ROUND_START + i * ROUND_LEN;
+    const k = eOutBack(prog(t, ROUND_START + i * ROUND_LEN, 0.35));
+    ctx.save();
+    ctx.globalAlpha = kAll;
+    ctx.fillStyle = "rgba(245,247,255,0.15)";
+    ctx.beginPath(); ctx.arc(x, 90, 9, 0, Math.PI * 2); ctx.fill();
+    if (active) { ctx.fillStyle = C.gold; ctx.beginPath(); ctx.arc(x, 90, 9 * k, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  });
+
+  // scoreboard
+  const sc = scoreAt(t);
+  ctx.save();
+  ctx.globalAlpha = kAll;
+  ctx.fillStyle = C.card;
+  roundRect(CX - 260, 930, 520, 96, 48); ctx.fill();
+  for (const key of ["gpt", "claude"]) {
+    const s = SIDES[key];
+    // bump the number when it changes
+    const bumpT = ROUNDS.map((r, i) => r.win === key ? ROUND_START + i * ROUND_LEN + 1.05 : -9).filter(v => v <= t).pop() ?? -9;
+    const bump = 1 + 0.5 * (1 - eOutCubic(prog(t, bumpT, 0.4))) * (t - bumpT < 0.4 ? 1 : 0);
+    ctx.save();
+    ctx.translate(CX + s.dir * 170, 978);
+    ctx.scale(bump, bump);
+    text(String(sc[key]), 0, 2, { font: font(900, 56), color: s.color, dir: "ltr" });
+    ctx.restore();
+    text(s.name, CX + s.dir * 70, 980, { font: font(700, 28), color: C.muted, dir: "ltr" });
+  }
+  ctx.fillStyle = "rgba(245,247,255,0.25)"; ctx.fillRect(CX - 1, 950, 2, 56);
+  ctx.restore();
+
+  text("تقييم تقريبي يختلف حسب الإصدار وطريقة الاستخدام", CX, 1050, { font: font(400, 20), color: C.muted, alpha: kAll * 0.8 });
+
+  ROUNDS.forEach((r, i) => drawRound(t, r, i, ROUND_START + i * ROUND_LEN));
+}
+
+function drawRound(t, r, i, s0) {
+  if (t < s0 - 0.05 || t > s0 + ROUND_LEN + 0.05) return;
+  const kOut = eInCubic(prog(t, s0 + ROUND_LEN - 0.3, 0.3));
+
+  // round label + title
+  const kt = eOutExpo(prog(t, s0, 0.6));
+  ctx.save();
+  ctx.globalAlpha = 1 - kOut;
+  text(`الجولة ${i + 1}`, CX, 170 + (1 - kt) * 30, { font: font(700, 32), color: C.gold, alpha: kt, spacing: 2 });
+  ctx.beginPath(); ctx.rect(0, 200, W, 140); ctx.clip();
+  text(r.title, CX, 268 + (1 - kt) * 130 - kOut * 40, { font: font(900, 92) });
+  ctx.restore();
+
+  const verdictT = s0 + 1.05;
+  const pw = 640, ph = 420, py = 630;
+  for (const key of ["gpt", "claude"]) {
+    const sd = SIDES[key];
+    const kin = eOutBack(prog(t, s0 + 0.15 + (key === "claude" ? 0.1 : 0), 0.6));
+    if (kin <= 0) continue;
+    const won = r.win === key, lost = r.win !== key && r.win !== "tie";
+    const kv = eOutCubic(prog(t, verdictT, 0.45));
+    const x = sd.x + sd.dir * ((1 - clamp(kin)) * 500 + kOut * 400);
+    const scale = 1 + (won ? 0.06 : lost ? -0.06 : 0) * kv;
+
+    ctx.save();
+    ctx.translate(x, py);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = clamp(kin * 1.5) * (1 - kOut) * (lost ? 1 - 0.45 * kv : 1);
+    if (won) { ctx.shadowColor = hexA(sd.color, 0.8 * kv); ctx.shadowBlur = 70 * kv; }
+    ctx.fillStyle = C.card;
+    roundRect(-pw / 2, -ph / 2, pw, ph, 36); ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.strokeStyle = won ? sd.color : hexA(sd.color, 0.35);
+    ctx.lineWidth = won ? lerp(2, 6, kv) : 2;
+    ctx.stroke();
+
+    badge(key, 0, -ph / 2 + 95, 50, t);
+    text(sd.name, 0, -ph / 2 + 190, { font: font(900, 50), color: sd.color, dir: "ltr" });
+    const kd = eOutCubic(prog(t, s0 + 0.45, 0.5));
+    text(r[key], 0, 70 + (1 - kd) * 20, { font: font(700, 42), alpha: kd });
+
+    if (won) {
+      const kb = eOutBack(prog(t, verdictT, 0.5));
+      if (kb > 0) {
+        ctx.save();
+        ctx.translate(0, ph / 2 - 50);
+        ctx.scale(kb, kb);
+        ctx.fillStyle = sd.color;
+        roundRect(-135, -32, 270, 64, 32); ctx.fill();
+        text("الأفضل هنا", 28, 2, { font: font(900, 30) });
+        ctx.restore();
+        check(-88, ph / 2 - 50, 36, C.white, prog(t, verdictT + 0.15, 0.3));
+      }
+    }
+    ctx.restore();
+    if (won) shockwave(t, verdictT, sd.color, sd.x, py, 520, 0.9, 6);
+  }
+
+  // tie stamp in the middle
+  if (r.win === "tie") {
+    const kb = prog(t, verdictT, 0.35);
+    if (kb > 0) {
+      const sc = lerp(2.6, 1, eOutCubic(kb));
+      ctx.save();
+      ctx.translate(CX, py);
+      ctx.rotate(-0.12);
+      ctx.scale(sc, sc);
+      ctx.globalAlpha = clamp(kb * 3) * (1 - kOut);
+      ctx.fillStyle = C.gold;
+      roundRect(-120, -48, 240, 96, 24); ctx.fill();
+      text("تعادل", 0, 4, { font: font(900, 54), color: C.bg });
+      ctx.restore();
+      shockwave(t, verdictT + 0.3, C.gold, CX, py, 400, 0.8, 6);
+    }
+  } else {
+    // small VS chip between the panels
+    const kc = eOutBack(prog(t, s0 + 0.25, 0.4)) * (1 - kOut);
+    if (kc > 0) {
+      ctx.save(); ctx.translate(CX, py); ctx.scale(kc, kc);
+      ctx.fillStyle = C.gold; ctx.beginPath(); ctx.arc(0, 0, 44, 0, Math.PI * 2); ctx.fill();
+      text("VS", 0, 4, { font: font(900, 42), color: C.bg, dir: "ltr" });
+      ctx.restore();
+    }
+  }
+}
+
+// ---------- scene 4: result + who should pick what (18.4 - 22) ----------
+const PICKS = {
+  gpt: ["صور وصوت", "تطبيقات وتكاملات كثيرة", "استخدام يومي متنوع"],
+  claude: ["كتابة طويلة متقنة", "تحليل مستندات ضخمة", "برمجة ووكلاء"],
+};
+function scene4(t) {
+  const s0 = ROUND_START + ROUNDS.length * ROUND_LEN; // 18.4
+  if (t < s0 || t > 22.2) return;
+  const kOut = eInCubic(prog(t, 21.5, 0.5));
+  ctx.save();
+  ctx.globalAlpha = 1 - kOut;
+
+  const sc = scoreAt(t);
+  const kr = eOutExpo(prog(t, s0 + 0.1, 0.8));
+  text("النتيجة النهائية", CX, 120 + (1 - kr) * 40, { font: font(700, 40), color: C.gold, alpha: kr });
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 140, W, 170); ctx.clip();
+  text(`${sc.gpt}  :  ${sc.claude}`, CX, 225 + (1 - kr) * 170, { font: font(900, 130), dir: "ltr" });
+  ctx.restore();
+  const kTie = eOutBack(prog(t, s0 + 0.6, 0.5));
+  if (kTie > 0) {
+    ctx.save(); ctx.translate(CX, 340); ctx.scale(kTie, kTie);
+    text("تعادل! والاختيار حسب احتياجك", 0, 0, { font: font(900, 50), color: C.white });
+    ctx.restore();
+  }
+  shockwave(t, s0 + 0.6, C.gold, CX, 230, 700, 1.0, 8);
+
+  const cw = 720, ch = 460, cy = 700;
+  for (const key of ["gpt", "claude"]) {
+    const sd = SIDES[key];
+    const kin = eOutExpo(prog(t, s0 + 0.9 + (key === "claude" ? 0.12 : 0), 0.8));
+    if (kin <= 0) continue;
+    ctx.save();
+    ctx.translate(sd.x - sd.dir * 20 + sd.dir * (1 - kin) * 900, cy);
+    ctx.fillStyle = C.card;
+    roundRect(-cw / 2, -ch / 2, cw, ch, 36); ctx.fill();
+    ctx.save(); roundRect(-cw / 2, -ch / 2, cw, ch, 36); ctx.clip();
+    ctx.fillStyle = sd.color; ctx.fillRect(cw / 2 - 12, -ch / 2, 12, ch);
+    ctx.restore();
+    // "Choose X if you need:" mixes Arabic and a Latin name; canvas handles the bidi run
+    text(`اختر ${sd.name} إذا كنت تحتاج:`, cw / 2 - 60, -ch / 2 + 75, { font: font(900, 44), align: "right" });
+    PICKS[key].forEach((p, j) => {
+      const kp = eOutCubic(prog(t, s0 + 1.4 + j * 0.2 + (key === "claude" ? 0.1 : 0), 0.5));
+      if (kp <= 0) return;
+      const y = -ch / 2 + 185 + j * 95;
+      ctx.save();
+      ctx.globalAlpha *= kp;
+      ctx.translate((1 - kp) * 50, 0);
+      ctx.fillStyle = hexA(sd.color, 0.18);
+      ctx.beginPath(); ctx.arc(cw / 2 - 90, y, 28, 0, Math.PI * 2); ctx.fill();
+      check(cw / 2 - 90, y + 2, 34, sd.color, prog(t, s0 + 1.55 + j * 0.2, 0.3));
+      text(p, cw / 2 - 140, y, { font: font(700, 40), align: "right" });
+      ctx.restore();
+    });
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------- scene 5: outro (21.9 - 25) ----------
+function scene5(t) {
+  if (t < 21.9) return;
+  // the two badges orbit each other and merge into one ring
+  const k = eOutCubic(prog(t, 21.9, 1.2));
+  const ang = t * 2.2;
+  const rad = lerp(260, 70, k);
+  const ka = eOutBack(prog(t, 21.9, 0.6));
+  badge("gpt", CX + Math.cos(ang) * rad, 380 + Math.sin(ang) * rad * 0.35, 46 * ka, t);
+  badge("claude", CX - Math.cos(ang) * rad, 380 - Math.sin(ang) * rad * 0.35, 46 * ka, t);
+  shockwave(t, 23.0, C.gold, CX, 380, 600, 1.2, 8);
+
+  const kt = eOutExpo(prog(t, 22.5, 0.9));
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 560, W, 160); ctx.clip();
+  text("الأفضل هو اللي يناسب شغلك", CX, 640 + (1 - kt) * 150, { font: font(900, 96) });
+  ctx.restore();
+
+  const ks = eOutCubic(prog(t, 23.1, 0.9));
+  if (ks > 0) {
+    text("CHATGPT  VS  CLAUDE", CX + 8, 770, { font: font(700, 32), color: C.muted, alpha: ks, dir: "ltr", spacing: lerp(40, 14, ks) });
+    ctx.fillStyle = C.gpt;
+    roundRect(CX + 330, 768, 150 * ks, 4, 2); ctx.fill();
+    ctx.fillStyle = C.claude;
+    roundRect(CX - 330 - 150 * ks, 768, 150 * ks, 4, 2); ctx.fill();
+  }
+}
+
+// ---------- master ----------
+function render(t) {
+  ctx.save();
+  drawBackground(t);
+  scene1(t);
+  scene2(t);
+  scene3(t);
+  scene4(t);
+  scene5(t);
+  flash(t, 0.85);
+  splitWipe(t, 3.15);
+  const fadeIn = 1 - prog(t, 0, 0.25);
+  const fadeOut = prog(t, DURATION - 0.7, 0.7);
+  const f = Math.max(fadeIn, fadeOut);
+  if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
+window.DURATION = DURATION;
+window.render = render;
+window.ready = Promise.all([400, 700, 900].flatMap(w => [
+  document.fonts.load(`${w} 50px Cairo`, "مقارنة"),
+  document.fonts.load(`${w} 50px Cairo`, "ABC"),
+])).then(() => true);
+
+if (!navigator.webdriver) {
+  const t0 = performance.now();
+  window.ready.then(() => {
+    const loop = now => { render(((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+}
+</script>
+</body>
+</html>

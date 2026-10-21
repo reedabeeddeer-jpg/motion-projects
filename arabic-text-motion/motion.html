@@ -1,0 +1,109 @@
+<!doctype html><html lang="ar"><meta charset="utf-8"><style>
+@font-face{font-family:Am;src:url(amiri.woff2);font-weight:700}
+@font-face{font-family:C9;src:url(cairo900.woff2)}
+@font-face{font-family:C7;src:url(cairo700.woff2)}
+@font-face{font-family:Rq;src:url(ruqaa.woff2)}
+*{margin:0;box-sizing:border-box}
+html{overflow:hidden;width:1920px;height:1080px}
+body{width:1920px;height:1080px;overflow:hidden;position:relative;direction:ltr}
+.abs{position:absolute;inset:0}
+#bg{position:absolute;left:-100px;top:-100px;width:2120px;height:1280px}
+#stage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;direction:rtl}
+.line{display:flex;gap:36px;direction:rtl;align-items:center;justify-content:center}
+.w{display:inline-block;will-change:transform}
+.clip{overflow:hidden;display:inline-block;padding:20px 8px}
+#vig{pointer-events:none;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.75) 100%)}
+#grain{position:absolute;inset:0;width:1920px;height:1080px;opacity:.08;mix-blend-mode:overlay}
+#fx{position:absolute;inset:0;overflow:hidden}
+</style><body>
+<div id="bg"></div><div id="fx"></div><div id="stage"></div>
+<div id="vig" class="abs"></div><canvas id="grain" width="480" height="270"></canvas>
+<script>
+const S=+location.hash.slice(1)||1, D=10;
+const cl=(x,a=0,b=1)=>Math.min(Math.max(x,a),b);
+const oQuart=x=>1-Math.pow(1-cl(x),4), oQuint=x=>1-Math.pow(1-cl(x),5), oExpo=x=>{x=cl(x);return x==1?1:1-Math.pow(2,-10*x)};
+const oBack=x=>{x=cl(x);const c1=1.9,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)};
+const ioCubic=x=>{x=cl(x);return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2};
+const $=id=>document.getElementById(id), stage=$('stage'), fx=$('fx'), bg=$('bg');
+function line(cls,words,css){const l=document.createElement('div');l.className='line';l.style.cssText=css||'';
+ const ws=words.map(t=>{const s=document.createElement('span');s.className='w '+cls;s.textContent=t;return s});
+ ws.forEach(s=>l.appendChild(s));stage.appendChild(l);return {l,ws}}
+let R; // per-style render
+// ---------- 1: SLAM (Scale impact + shake + flash) ----------
+if(S==1){
+ bg.style.background='radial-gradient(ellipse at 50% 55%,#3a0d0d 0%,#140505 55%,#050202 100%)';
+ const a=line('',['انطلق','ولا','تتوقف'],'');
+ a.ws.forEach(w=>{w.style.cssText+='font-family:C9;font-size:210px;color:#fff;line-height:1.3;text-shadow:0 0 50px rgba(255,70,40,.55)'});
+ const b=line('',['الطريق أمامك'],'margin-top:10px');
+ b.ws[0].style.cssText+='font-family:C7;font-size:70px;color:#ff5a3c;letter-spacing:6px';
+ fx.innerHTML='<div id="flash" class="abs" style="background:#fff;opacity:0"></div><div id="streaks" class="abs"></div>';
+ const st=$('streaks');for(let i=0;i<14;i++){const d=document.createElement('div');d.style.cssText=`position:absolute;top:-200px;height:1500px;width:${2+i%3*2}px;left:${(i*149)%1900}px;background:linear-gradient(transparent,rgba(255,90,50,.25),transparent);transform:rotate(18deg)`;st.appendChild(d)}
+ const T=[0.8,1.5,2.2];
+ R=t=>{let shake=0,flash=0;
+  a.ws.forEach((w,i)=>{const p=oExpo((t-T[i])/0.4),o=cl((t-8.7-i*.08)/0.7);
+   w.style.opacity=p*(1-o);w.style.transform=`scale(${2.8-1.8*p+o*0.5})`;w.style.filter=`blur(${(1-p)*14+o*10}px)`;
+   const d=t-T[i-0]-0.38;if(d>0&&d<0.35){shake=Math.max(shake,(1-d/0.35)*18);flash=Math.max(flash,(1-d/0.35)*.35)}});
+  const pb=oQuart((t-3.6)/1.0),ob=cl((t-8.7)/0.7);
+  b.ws[0].style.opacity=pb*(1-ob);b.ws[0].style.transform=`translateY(${(1-pb)*40}px)`;b.ws[0].style.letterSpacing=(6+(1-pb)*30)+'px';
+  stage.style.transform=`translate(${Math.sin(t*90)*shake}px,${Math.cos(t*77)*shake}px)`;
+  $('flash').style.opacity=flash;
+  st.style.transform=`translateX(${-t*25}px)`;bg.style.transform=`scale(${1+.05*t/D})`}
+}
+// ---------- 2: MASK REVEAL (Position behind mask + tracking) ----------
+if(S==2){
+ bg.style.background='linear-gradient(160deg,#1a1a1c,#0a0a0b 70%)';
+ const words=['الصمت','أبلغ','من','الكلام'];
+ const l=document.createElement('div');l.className='line';l.style.gap='44px';
+ const ws=words.map(t=>{const c=document.createElement('span');c.className='clip';const s=document.createElement('span');s.className='w';s.textContent=t;
+  s.style.cssText='font-family:Am;font-size:170px;color:#f2f2f0;line-height:1.35;display:inline-block';c.appendChild(s);l.appendChild(c);return s});
+ stage.appendChild(l);
+ const sub=line('',['حكمة عربية'],'margin-top:36px');sub.ws[0].style.cssText+='font-family:C7;font-size:44px;color:#9a9a96;letter-spacing:14px';
+ fx.innerHTML='<div id="ln" style="position:absolute;left:50%;top:230px;height:2px;background:#f2f2f0;transform:translateX(-50%)"></div><div id="ln2" style="position:absolute;left:50%;bottom:230px;height:2px;background:#f2f2f0;transform:translateX(-50%)"></div>';
+ R=t=>{ws.forEach((w,i)=>{const p=oQuint((t-1.0-i*0.28)/1.3),o=ioCubic((t-8.4-i*0.12)/0.9);
+   w.style.transform=`translateY(${(1-p)*125-o*125}%)`;w.style.letterSpacing=(-6+p*6+(t/D)*10)+'px'});
+  const lw=oQuart((t-0.3)/1.4)*(1-ioCubic((t-8.6)/0.8))*760;$('ln').style.width=lw+'px';$('ln2').style.width=lw+'px';
+  const ps=oQuart((t-3.4)/1.2)*(1-cl((t-8.4)/0.6));sub.ws[0].style.opacity=ps;sub.ws[0].style.transform=`translateY(${(1-ps)*18}px)`;
+  stage.style.transform=`scale(${1+.03*t/D})`}
+}
+// ---------- 3: LIGHT REVEAL (gradient mask wipe + blur + tracking + dust) ----------
+if(S==3){
+ bg.style.background='radial-gradient(ellipse at 50% 50%,#0f3a3a 0%,#071c1f 55%,#020809 100%)';
+ const a=line('',['النور','يولد','من','العتمة'],'gap:40px');
+ a.ws.forEach(w=>w.style.cssText+='font-family:Rq;font-size:165px;color:#f6e3b4;line-height:1.5;text-shadow:0 0 45px rgba(255,205,110,.6)');
+ fx.innerHTML='<canvas id="dust" width="1920" height="1080" class="abs"></canvas><div id="beam" class="abs" style="background:radial-gradient(ellipse 500px 700px at 50% 50%,rgba(255,215,140,.28),transparent 70%);"></div>';
+ const dc=$('dust').getContext('2d');const P=[];let s0=7;const rnd=()=>{s0=(s0*16807)%2147483647;return s0/2147483647};
+ for(let i=0;i<90;i++)P.push({x:rnd()*1920,y:rnd()*1080,r:1+rnd()*3,v:12+rnd()*40,ph:rnd()*6.28,a:.2+rnd()*.6});
+ R=t=>{const vis=cl((t)/1.5)*(1-cl((t-9)/1));
+  a.ws.forEach((w,i)=>{const p=oQuart((t-0.8-i*0.45)/1.8),o=cl((t-8.6)/1.0);
+   w.style.opacity=p*(1-o);w.style.filter=`blur(${(1-p)*34+o*20}px)`;w.style.letterSpacing=((1-p)*40)+'px';
+   w.style.transform=`scale(${1.25-.25*p+o*.05}) translateY(${(1-p)*-30}px)`});
+  const wipe=oQuart((t-0.5)/3.5);$('beam').style.transform=`translateX(${(1-wipe*2)*700}px)`;$('beam').style.opacity=(1-cl((t-4.5)/2))*.9+.1;
+  dc.clearRect(0,0,1920,1080);P.forEach(q=>{const y=((q.y-q.v*t)%1080+1080)%1080,x=q.x+Math.sin(t*.8+q.ph)*30;
+   dc.globalAlpha=q.a*vis*(.5+.5*Math.sin(t*2+q.ph));dc.fillStyle='#ffe2a0';dc.beginPath();dc.arc(x,y,q.r,0,6.28);dc.fill()});
+  bg.style.transform=`scale(${1+.05*t/D})`}
+}
+// ---------- 4: 3D FLIP (rotateX + slide + back-ease + shapes) ----------
+if(S==4){
+ bg.style.background='linear-gradient(135deg,#1b1464 0%,#3a1c71 45%,#0f2a6b 100%)';
+ stage.style.perspective='1400px';
+ const a=line('',['كل','حلم','يبدأ','بفكرة'],'gap:46px');
+ a.ws.forEach(w=>w.style.cssText+='font-family:C9;font-size:190px;color:#fff;line-height:1.35;text-shadow:0 14px 40px rgba(0,0,0,.35)');
+ a.ws[3].style.color='#ffd34d';
+ const bar=document.createElement('div');bar.id='bar';bar.style.cssText='height:10px;width:0;background:linear-gradient(90deg,#ffd34d,#ff7ab6);border-radius:6px;margin-top:20px';stage.appendChild(bar);
+ fx.innerHTML='';const sh=[];for(let i=0;i<7;i++){const d=document.createElement('div');const sz=140+i*60;
+  d.style.cssText=`position:absolute;width:${sz}px;height:${sz}px;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.22),rgba(255,255,255,.02));left:${(i*277)%1700}px;top:${(i*191)%800}px`;fx.appendChild(d);sh.push([d,i])}
+ R=t=>{a.ws.forEach((w,i)=>{const dir=i%2?1:-1,p=oBack((t-0.9-i*0.35)/1.1),pc=cl((t-0.9-i*0.35)/1.1),o=ioCubic((t-8.3-i*0.15)/0.8);
+   w.style.opacity=oQuart((t-0.9-i*0.35)/0.5)*(1-o);
+   w.style.transform=`translateX(${(1-pc)*90*dir}px) rotateX(${(1-p)*-95+o*90}deg) scale(${.6+.4*p})`});
+  const bw=oQuart((t-2.8)/1.2)*(1-ioCubic((t-8.6)/.8))*900;$('bar').style.width=bw+'px';
+  sh.forEach(([d,i])=>{d.style.transform=`translate(${Math.sin(t*.5+i)*60}px,${Math.cos(t*.4+i*2)*70}px) scale(${1+.08*Math.sin(t+i)})`});
+  bg.style.transform=`scale(${1+.04*t/D})`}
+}
+window.render=t=>{R(t);
+ const c=$('grain'),g=c.getContext('2d'),im=g.createImageData(480,270);let s=Math.floor(t*30)*9301+49297;
+ for(let i=0;i<im.data.length;i+=4){s=(s*9301+49297)%233280;im.data[i]=im.data[i+1]=im.data[i+2]=s/233280*255;im.data[i+3]=255}
+ g.putImageData(im,0,0);
+ document.body.style.opacity=cl(t/0.5)*cl((D-t)/0.5)};
+document.fonts.load('10px Am');document.fonts.load('10px C9');document.fonts.load('10px C7');document.fonts.load('10px Rq');
+document.fonts.ready.then(()=>window.ready=true);
+</script></body></html>
