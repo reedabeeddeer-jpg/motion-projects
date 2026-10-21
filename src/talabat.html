@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>طلبات - Flat Design</title>
+<style>
+  @font-face { font-family: "Cairo"; font-weight: 900; src: url(../assets/fonts/cairo-arabic-900-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+FE70-FEFF; }
+  @font-face { font-family: "Cairo"; font-weight: 900; src: url(../assets/fonts/cairo-latin-900-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2026; }
+  @font-face { font-family: "Cairo"; font-weight: 700; src: url(../assets/fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+FE70-FEFF; }
+  @font-face { font-family: "Cairo"; font-weight: 700; src: url(../assets/fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2022, U+2026; }
+  html, body { margin: 0; background: #FF5A00; }
+  canvas { display: block; width: 100vw; height: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Talabat-style promo in flat design. 1920x1080, 30fps, 20s.
+// Scenes: hungry → browse restaurants → place order → rider on the way → delivered → end card.
+const W = 1920, H = 1080;
+const DURATION = 20;
+const S = [0, 3.5, 7.5, 11, 15.5, 18, 20];   // scene starts (soundtrack uses the same cuts)
+const TR = 0.55;                              // circle-wipe length
+const ctx = document.getElementById("c").getContext("2d");
+
+// palette
+const OR = "#FF5A00", OR_D = "#E04E00", OR_L = "#FFE3D1", CREAM = "#FFF4EC";
+const INK = "#2D2A3E", GREY = "#8F8A9E", GREEN = "#2DBE6C";
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const P = (t, a, d) => clamp((t - a) / d);
+const eOut = k => 1 - Math.pow(1 - k, 3);
+const eIn = k => k * k * k;
+const eIO = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const eBack = k => { const c = 1.9; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
+const lerp = (a, b, k) => a + (b - a) * k;
+function rng(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
+
+function bg(c) { ctx.fillStyle = c; ctx.fillRect(0, 0, W, H); }
+function rr(x, y, w, h, r, c) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); if (c) { ctx.fillStyle = c; ctx.fill(); } }
+function circle(x, y, r, c) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill(); }
+function text(s, x, y, size, color, align = "center", weight = 900) {
+  ctx.font = `${weight} ${size}px Cairo`; ctx.fillStyle = color;
+  ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.direction = "rtl";
+  ctx.fillText(s, x, y);
+}
+function textW(s, size, weight = 900) { ctx.font = `${weight} ${size}px Cairo`; ctx.direction = "rtl"; return ctx.measureText(s).width; }
+// scale-pop around (x,y): runs fn() in local coords
+function pop(t, at, x, y, fn, dur = 0.5) {
+  const k = P(t, at, dur); if (k <= 0) return;
+  ctx.save(); ctx.translate(x, y); const s = eBack(k); ctx.scale(s, s); ctx.globalAlpha = clamp(k * 3); fn(); ctx.restore();
+}
+// fade + slide-up text
+function rise(t, at, s, x, y, size, color, align = "center", weight = 900, dist = 60) {
+  const k = eOut(P(t, at, 0.55)); if (k <= 0) return;
+  ctx.save(); ctx.globalAlpha = k; text(s, x, y + (1 - k) * dist, size, color, align, weight); ctx.restore();
+}
+function star(x, y, r, c) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? r * .45 : r; ctx.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad); }
+  ctx.closePath(); ctx.fillStyle = c; ctx.fill();
+}
+function finger(x, y, press) {
+  // flat tap indicator: soft halo + solid dot
+  circle(x, y, 46 - press * 8, "rgba(45,42,62,0.18)");
+  circle(x, y, 26 - press * 4, "rgba(45,42,62,0.55)");
+}
+function ripple(x, y, k, c = "rgba(255,255,255,0.6)") {
+  if (k <= 0 || k >= 1) return;
+  ctx.beginPath(); ctx.arc(x, y, 20 + k * 140, 0, Math.PI * 2);
+  ctx.strokeStyle = c; ctx.globalAlpha = 1 - k; ctx.lineWidth = 10; ctx.stroke(); ctx.globalAlpha = 1;
+}
+
+// ---------- flat food icons (drawn in a ~100px box centered on 0,0) ----------
+function burger() {
+  ctx.beginPath(); ctx.moveTo(-48, -4); ctx.bezierCurveTo(-48, -56, 48, -56, 48, -4); ctx.closePath(); ctx.fillStyle = "#F5A23B"; ctx.fill();
+  ctx.fillStyle = "#FFF3D6";
+  [[-20, -30], [0, -38], [20, -30], [-8, -20], [12, -18]].forEach(([x, y]) => { ctx.beginPath(); ctx.ellipse(x, y, 4, 2.4, -.4, 0, 7); ctx.fill(); });
+  ctx.beginPath(); ctx.moveTo(-52, -4);
+  for (let i = 0; i <= 8; i++) ctx.lineTo(-52 + i * 13, i % 2 ? 6 : -2);
+  ctx.lineTo(52, 8); ctx.lineTo(-52, 8); ctx.closePath(); ctx.fillStyle = "#4CC26A"; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-46, 6); ctx.lineTo(46, 6); ctx.lineTo(46, 12); ctx.lineTo(20, 12); ctx.lineTo(12, 22); ctx.lineTo(4, 12); ctx.lineTo(-46, 12); ctx.closePath(); ctx.fillStyle = "#FFD23F"; ctx.fill();
+  rr(-46, 12, 92, 16, 8, "#7A3E1D");
+  rr(-46, 28, 92, 18, [4, 4, 16, 16], "#F5A23B");
+}
+function pizza() {
+  ctx.beginPath(); ctx.moveTo(0, 50); ctx.lineTo(-42, -34); ctx.lineTo(42, -34); ctx.closePath(); ctx.fillStyle = "#FFC94A"; ctx.fill();
+  rr(-48, -48, 96, 18, 9, "#E08A2E");
+  [[-14, -14, 9], [14, -10, 8], [0, 16, 7]].forEach(([x, y, r]) => circle(x, y, r, "#E84A3A"));
+  [[8, 4], [-6, 0], [-18, -26]].forEach(([x, y]) => circle(x, y, 3.5, "#4CC26A"));
+}
+function fries() {
+  const cols = ["#FFD23F", "#FFC21A"];
+  [[-24, -52, -.15], [-10, -60, -.05], [4, -56, .05], [18, -50, .14], [-2, -44, 0]].forEach(([x, y, a], i) => {
+    ctx.save(); ctx.translate(x, y + 30); ctx.rotate(a); rr(-6, -30, 12, 60, 4, cols[i % 2]); ctx.restore();
+  });
+  ctx.beginPath(); ctx.moveTo(-36, -6); ctx.lineTo(36, -6); ctx.lineTo(27, 50); ctx.lineTo(-27, 50); ctx.closePath(); ctx.fillStyle = "#E8402E"; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-36, -6); ctx.quadraticCurveTo(0, 14, 36, -6); ctx.lineTo(35, 2); ctx.quadraticCurveTo(0, 22, -35, 2); ctx.closePath(); ctx.fillStyle = "#C9301F"; ctx.fill();
+  circle(0, 26, 10, "#FFD23F");
+}
+function drink() {
+  ctx.save(); ctx.translate(10, -40); ctx.rotate(.25); rr(-4, -26, 8, 40, 4, "#E8402E"); ctx.restore();
+  ctx.beginPath(); ctx.moveTo(-32, -30); ctx.lineTo(32, -30); ctx.lineTo(24, 50); ctx.lineTo(-24, 50); ctx.closePath(); ctx.fillStyle = "#3FA9F5"; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-29, 0); ctx.lineTo(29, 0); ctx.lineTo(27, 18); ctx.lineTo(-27, 18); ctx.closePath(); ctx.fillStyle = "#FFFFFF"; ctx.fill();
+  rr(-38, -40, 76, 14, 7, "#2A86D1");
+}
+const ICONS = [burger, pizza, fries, drink];
+function icon(fn, x, y, s, rot = 0) { ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s); fn(); ctx.restore(); }
+
+// ---------- phone ----------
+function phone(cx, cy, w, h, screen, rot = 0) {
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+  rr(-w / 2 + 22, -h / 2 + 26, w, h, 56, "rgba(45,42,62,0.14)");    // flat offset shadow
+  rr(-w / 2, -h / 2, w, h, 56, "#1F1D2B");
+  const sx = -w / 2 + 14, sy = -h / 2 + 14, sw = w - 28, sh = h - 28;
+  ctx.save(); rr(sx, sy, sw, sh, 44); ctx.clip();
+  ctx.fillStyle = "#FFFFFF"; ctx.fillRect(sx, sy, sw, sh);
+  ctx.translate(sx, sy); screen(sw, sh);
+  ctx.restore();
+  rr(-60, -h / 2 + 24, 120, 30, 15, "#1F1D2B");                     // notch
+  ctx.restore();
+}
+
+// ================= SCENE 1: hungry? =================
+function s1(t) {
+  bg(OR);
+  // concentric flat rings breathing
+  const g = eOut(P(t, 0, 0.9));
+  [[760, "#FF6A1A"], [560, "#FF7A30"], [360, "#FF8A45"]].forEach(([r, c], i) =>
+    circle(960, 540, r * g * (1 + Math.sin(t * 2 + i) * 0.015), c));
+  // orbiting dots
+  for (let i = 0; i < 10; i++) {
+    const a = t * 0.4 + i * Math.PI / 5, r = 470;
+    circle(960 + Math.cos(a) * r * 1.55, 540 + Math.sin(a) * r * 0.9, 10 * g, "rgba(255,255,255,0.35)");
+  }
+  // food badges in the corners
+  const spots = [[-600, -260], [600, -260], [-600, 260], [600, 260]];
+  spots.forEach(([dx, dy], i) => {
+    const fy = Math.sin(t * 2.4 + i * 1.7) * 14;
+    pop(t, 0.7 + i * 0.15, 960 + dx, 540 + dy + fy, () => {
+      circle(10, 12, 118, OR_D);
+      circle(0, 0, 118, "#FFFFFF");
+      icon(ICONS[i], 0, 0, 1.45, Math.sin(t * 2 + i) * 0.08);
+    }, 0.55);
+  });
+  // headline
+  pop(t, 0.25, 960, 470, () => {
+    text("جوعان؟", 10, 12, 230, OR_D);
+    text("جوعان؟", 0, 0, 230, "#FFFFFF");
+  }, 0.6);
+  // sub line in a white pill
+  const k = eOut(P(t, 1.5, 0.5));
+  if (k > 0) {
+    ctx.save(); ctx.globalAlpha = k; ctx.translate(0, (1 - k) * 50);
+    const s = "كل اللي تشتهيه… بضغطة وحدة", tw = textW(s, 58) + 100;
+    rr(960 - tw / 2, 660, tw, 100, 50, "#FFFFFF");
+    text(s, 960, 708, 58, OR);
+    ctx.restore();
+  }
+}
+
+// ================= SCENE 2: browse restaurants =================
+const SHOPS = [
+  { ic: burger, name: "برجر هاوس", meta: "4.8   •   20 دقيقة", c: "#FFE3D1" },
+  { ic: pizza, name: "بيتزا نابولي", meta: "4.7   •   25 دقيقة", c: "#FFF1C9" },
+  { ic: fries, name: "كرسبي فرايز", meta: "4.9   •   15 دقيقة", c: "#FFE0DC" },
+  { ic: drink, name: "عصائر فريش", meta: "4.6   •   10 دقائق", c: "#DDF0FF" },
+];
+const CATS = ["برجر", "بيتزا", "سناك", "مشروبات"];
+const CAT_C = ["#FFE3D1", "#FFF1C9", "#FFE0DC", "#DDF0FF"];
+
+function listScreen(t, w, h) {
+  // header
+  ctx.fillStyle = OR; ctx.fillRect(0, 0, w, 180);
+  text("طلبات", w - 34, 92, 56, "#FFFFFF", "right");
+  text("التوصيل إلى  •  البيت", w - 34, 146, 24, "#FFE3D1", "right", 700);
+  circle(56, 104, 30, "#FFFFFF"); circle(56, 98, 10, OR); rr(42, 110, 28, 12, 6, OR);
+  // search
+  rr(24, 206, w - 48, 66, 33, "#F3F0EE");
+  ctx.beginPath(); ctx.arc(w - 66, 236, 11, 0, 7); ctx.strokeStyle = GREY; ctx.lineWidth = 4; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(w - 58, 244); ctx.lineTo(w - 50, 252); ctx.stroke();
+  text("ابحث عن مطعم أو طبق", w - 92, 240, 24, GREY, "right", 700);
+  // categories
+  CATS.forEach((c, j) => {
+    const x = w - 72 - j * 96;
+    pop(t, 0.55 + j * 0.08, x, 335, () => { circle(0, 0, 40, CAT_C[j]); icon(ICONS[j], 0, 0, 0.5); }, 0.45);
+    rise(t, 0.65 + j * 0.08, c, x, 398, 20, INK, "center", 700, 16);
+  });
+  // restaurant cards
+  const tapK = P(t, 2.95, 0.5);
+  SHOPS.forEach((s, j) => {
+    const k = eOut(P(t, 0.9 + j * 0.14, 0.6)); if (k <= 0) return;
+    const y = 436 + j * 140 + (1 - k) * 260;
+    ctx.save(); ctx.globalAlpha = k;
+    const hi = j === 0 && tapK > 0;
+    const sc = j === 0 ? 1 - Math.sin(tapK * Math.PI) * 0.04 : 1;
+    ctx.translate(w / 2, y + 60); ctx.scale(sc, sc); ctx.translate(-w / 2, -(y + 60));
+    rr(20, y, w - 40, 122, 24, hi ? "#FFF0E6" : "#FFFFFF");
+    ctx.lineWidth = hi ? 4 : 2; ctx.strokeStyle = hi ? OR : "#EDE9E6"; ctx.stroke();
+    rr(w - 140, y + 11, 100, 100, 20, s.c);
+    icon(s.ic, w - 90, y + 62, 0.72);
+    text(s.name, w - 160, y + 44, 30, INK, "right");
+    star(w - 172, y + 84, 11, "#FFB400");
+    text(s.meta, w - 190, y + 85, 21, GREY, "right", 700);
+    ctx.restore();
+  });
+  // tap on first card
+  const fk = P(t, 2.4, 0.5);
+  if (fk > 0 && t < 3.9) {
+    const fx = lerp(w * 0.9, w * 0.55, eOut(fk)), fy = lerp(h + 60, 498, eOut(fk));
+    ripple(w * 0.55, 498, P(t, 2.95, 0.5), "rgba(255,90,0,0.5)");
+    finger(fx, fy, Math.sin(tapK * Math.PI));
+  }
+}
+
+function s2(t) {
+  bg(CREAM);
+  circle(1920, 1080, 380 * eOut(P(t, 0.2, 0.8)), OR_L);
+  circle(1500, 120, 70 * eOut(P(t, 0.4, 0.6)), "#FFD9C2");
+  for (let i = 0; i < 5; i++) circle(1100 + i * 40, 900, 8 * eOut(P(t, 0.6 + i * 0.05, 0.3)), "#FFC4A0");
+  const pe = eOut(P(t, 0.05, 0.85));
+  phone(620, 545 + (1 - pe) * 1000, 440, 900, (w, h) => listScreen(t, w, h), (1 - pe) * -0.15);
+  // copy on the right
+  rise(t, 0.5, "اختار من", 1370, 380, 110, INK);
+  const hk = eOut(P(t, 0.85, 0.6));
+  if (hk > 0) {
+    const tw = textW("آلاف المطاعم", 130) + 60;
+    rr(1370 + tw / 2 - tw * hk, 545, tw * hk, 70, 22, "#FFD9C2");
+  }
+  rise(t, 0.7, "آلاف المطاعم", 1370, 530, 130, OR);
+  rise(t, 1.15, "برجر، بيتزا، مشاوي… وأكثر", 1370, 700, 50, GREY, "center", 700);
+}
+
+// ================= SCENE 3: place order =================
+function cartScreen(t, w, h) {
+  ctx.fillStyle = "#FAF8F6"; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, w, 130);
+  text("سلّتك", w - 34, 88, 40, INK, "right");
+  ctx.beginPath(); ctx.moveTo(52, 76); ctx.lineTo(38, 88); ctx.lineTo(52, 100); ctx.strokeStyle = INK; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.stroke();
+  text("من: برجر هاوس", w - 34, 168, 24, OR, "right", 700);
+  const items = [[burger, "برجر كلاسيك", "3.500 د.ك", "2"], [fries, "بطاطس كبيرة", "1.750 د.ك", "1"]];
+  items.forEach(([ic, n, p, q], j) => {
+    const k = eOut(P(t, 0.3 + j * 0.15, 0.5)); if (k <= 0) return;
+    const y = 200 + j * 150;
+    ctx.save(); ctx.globalAlpha = k; ctx.translate((1 - k) * 200, 0);
+    rr(20, y, w - 40, 130, 24, "#FFFFFF");
+    rr(w - 136, y + 15, 100, 100, 20, OR_L); icon(ic, w - 86, y + 66, 0.72);
+    text(n, w - 156, y + 42, 26, INK, "right");
+    text(p, w - 156, y + 92, 22, OR, "right", 900);
+    // stepper
+    rr(34, y + 74, 104, 40, 20, "#F3F0EE");
+    text("−", 56, y + 93, 26, INK); text("+", 116, y + 93, 26, OR); text(q, 86, y + 95, 22, INK);
+    ctx.restore();
+  });
+  // totals
+  const tk = eOut(P(t, 0.65, 0.5));
+  ctx.save(); ctx.globalAlpha = tk;
+  rr(20, 520, w - 40, 210, 24, "#FFFFFF");
+  text("المجموع الفرعي", w - 50, 566, 24, GREY, "right", 700); text("5.250 د.ك", 50, 566, 24, INK, "left", 700);
+  text("رسوم التوصيل", w - 50, 614, 24, GREY, "right", 700); text("مجاناً", 50, 614, 24, GREEN, "left", 900);
+  ctx.fillStyle = "#EDE9E6"; ctx.fillRect(50, 648, w - 100, 3);
+  text("الإجمالي", w - 50, 690, 30, INK, "right"); text("5.250 د.ك", 50, 690, 30, INK, "left");
+  ctx.restore();
+  // order button
+  const bx = w / 2, by = h - 100;
+  const press = Math.sin(P(t, 1.35, 0.3) * Math.PI);
+  const bk = eBack(P(t, 0.8, 0.5));
+  if (bk > 0) {
+    ctx.save(); ctx.translate(bx, by); ctx.scale(bk * (1 - press * 0.06), bk * (1 - press * 0.06));
+    rr(-(w - 48) / 2, -45 + 8, w - 48, 90, 45, OR_D);
+    rr(-(w - 48) / 2, -45 + press * 6, w - 48, 90, 45, OR);
+    text("اطلب الآن", 0, press * 6, 36, "#FFFFFF");
+    ctx.restore();
+  }
+  ripple(bx, by, P(t, 1.4, 0.5), "rgba(255,90,0,0.6)");
+  // finger
+  const fk = P(t, 0.95, 0.4);
+  if (fk > 0 && t < 1.85) finger(lerp(w + 80, bx + 60, eOut(fk)), lerp(h + 120, by, eOut(fk)), press);
+  // confirmation takeover
+  const ck = eIO(P(t, 1.6, 0.45));
+  if (ck > 0) {
+    ctx.save(); ctx.beginPath(); ctx.arc(bx, by, ck * 1100, 0, 7); ctx.clip();
+    ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, w, h);
+    const cy = h * 0.4;
+    pop(t, 1.95, w / 2, cy, () => { circle(0, 0, 150, "#E3F7EA"); circle(0, 0, 105, GREEN); }, 0.5);
+    const mk = eOut(P(t, 2.2, 0.35));
+    if (mk > 0) {
+      ctx.beginPath();
+      const pts = [[-44, 4], [-12, 36], [48, -30]];
+      const segL = [Math.hypot(32, 32), Math.hypot(60, 66)], tot = segL[0] + segL[1];
+      let d = mk * tot;
+      ctx.moveTo(w / 2 + pts[0][0], cy + pts[0][1]);
+      const a = Math.min(d, segL[0]) / segL[0];
+      ctx.lineTo(w / 2 + lerp(pts[0][0], pts[1][0], a), cy + lerp(pts[0][1], pts[1][1], a));
+      if (d > segL[0]) { const b = (d - segL[0]) / segL[1]; ctx.lineTo(w / 2 + lerp(pts[1][0], pts[2][0], b), cy + lerp(pts[1][1], pts[2][1], b)); }
+      ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 20; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
+    }
+    rise(t, 2.3, "تم تأكيد طلبك!", w / 2, cy + 230, 42, INK);
+    rise(t, 2.45, "المطعم يجهّز طلبك الحين", w / 2, cy + 290, 26, GREY, "center", 700);
+    for (let i = 0; i < 3; i++) circle(w / 2 - 30 + i * 30, cy + 350, 8 * (0.6 + 0.4 * Math.abs(Math.sin(t * 5 - i * 0.6))), i === Math.floor(t * 4) % 3 ? OR : OR_L);
+    ctx.restore();
+  }
+}
+
+function s3(t) {
+  bg(OR);
+  circle(0, 0, 330 * eOut(P(t, 0.1, 0.7)), "#FF6A1A");
+  circle(0, 1080, 220 * eOut(P(t, 0.2, 0.7)), OR_D);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) circle(140 + i * 46, 820 + j * 46, 7 * eOut(P(t, 0.4 + (i + j) * 0.04, 0.3)), "rgba(255,255,255,0.35)");
+  const pe = eOut(P(t, 0.0, 0.8));
+  phone(1320 + (1 - pe) * 900, 545, 440, 900, (w, h) => cartScreen(t, w, h), (1 - pe) * 0.12);
+  pop(t, 0.35, 640, 400, () => { text("اطلب", 8, 10, 170, OR_D); text("اطلب", 0, 0, 170, "#FFFFFF"); }, 0.55);
+  rise(t, 0.6, "بضغطة زر", 640, 580, 120, "#FFFFFF");
+  const uk = eOut(P(t, 0.9, 0.5));
+  rr(640 - 230, 668, 460 * uk, 16, 8, "#FFFFFF");
+  rise(t, 1.1, "وادفع أونلاين أو كاش", 640, 770, 50, OR_L, "center", 700);
+}
+
+// ================= SCENE 4: rider on the way =================
+const R = rng(42);
+const FAR = [], NEAR = [];
+for (let x = 0; x < 2600;) { const w = 120 + R() * 120; FAR.push([x, w, 220 + R() * 240]); x += w + 10; }
+for (let x = 0; x < 2800;) { const w = 150 + R() * 130; NEAR.push([x, w, 230 + R() * 300, Math.floor(R() * 3)]); x += w + 30 + R() * 50; }
+const FAR_W = 2600, NEAR_W = 2800, GROUND = 800;
+const NEAR_C = ["#FF9E6B", "#FFB385", "#FF8A50"];
+
+function rider(t) {
+  const spin = t * 22;
+  // delivery box
+  rr(-232, -195, 120, 105, 14, OR_D);
+  rr(-240, -205, 120, 105, 14, OR);
+  text("طلبات", -180, -164, 30, "#FFFFFF");
+  ctx.beginPath(); ctx.arc(-180, -150, 22, 0.2 * Math.PI, 0.8 * Math.PI); ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 6; ctx.lineCap = "round"; ctx.stroke();
+  // scooter
+  ctx.fillStyle = "#3B3753";
+  ctx.beginPath(); ctx.moveTo(-150, -20); ctx.lineTo(-140, -70); ctx.lineTo(-20, -70); ctx.lineTo(40, -30); ctx.lineTo(70, -30); ctx.lineTo(70, -10); ctx.lineTo(-150, -10); ctx.closePath(); ctx.fill();
+  rr(-150, -100, 130, 30, 12, "#3B3753");                     // seat base
+  ctx.beginPath(); ctx.moveTo(60, -30); ctx.lineTo(95, -150); ctx.strokeStyle = "#3B3753"; ctx.lineWidth = 18; ctx.lineCap = "round"; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(78, -158); ctx.lineTo(112, -152); ctx.lineWidth = 12; ctx.stroke();
+  circle(108, -120, 10, "#FFD23F");                            // headlight
+  // wheels
+  [[-105, 0], [85, 0]].forEach(([x, y]) => {
+    circle(x, y, 42, "#1F1D2B"); circle(x, y, 18, "#D7D3E0");
+    ctx.save(); ctx.translate(x, y); ctx.rotate(spin);
+    ctx.strokeStyle = "#8F8A9E"; ctx.lineWidth = 5;
+    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(i * 2.09) * 16, Math.sin(i * 2.09) * 16); ctx.stroke(); }
+    ctx.restore();
+  });
+  // rider
+  ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-60, -100); ctx.lineTo(10, -95); ctx.lineTo(25, -45); ctx.strokeStyle = "#3A3F6B"; ctx.lineWidth = 30; ctx.stroke();
+  rr(25, -58, 34, 18, 9, "#1F1D2B");                           // shoe
+  ctx.save(); ctx.translate(-50, -110); ctx.rotate(0.18);
+  rr(-28, -110, 64, 112, 26, "#FF7A30"); ctx.restore();       // torso
+  ctx.beginPath(); ctx.moveTo(-20, -195); ctx.lineTo(40, -160); ctx.lineTo(90, -155); ctx.strokeStyle = "#FF7A30"; ctx.lineWidth = 22; ctx.stroke();
+  circle(92, -155, 11, "#C98A5E");                             // hand
+  circle(-26, -240, 40, OR);                                   // helmet
+  ctx.beginPath(); ctx.arc(-22, -236, 32, -0.5, 0.9); ctx.lineTo(-10, -236); ctx.closePath(); ctx.fillStyle = "#2D2A3E"; ctx.fill();
+  rr(-70, -232, 30, 10, 5, OR_D);
+}
+
+function s4(t) {
+  // sky
+  bg("#FFE9D6");
+  circle(1560, 300, 120, "#FFD0A8"); circle(1560, 300, 85, "#FFB27A");
+  // clouds
+  for (let i = 0; i < 4; i++) {
+    const x = ((i * 620 - t * 60) % 2400 + 2400) % 2400 - 200, y = 140 + (i % 2) * 90;
+    rr(x, y, 220, 56, 28, "#FFFFFF"); circle(x + 80, y + 4, 42, "#FFFFFF"); circle(x + 140, y + 10, 32, "#FFFFFF");
+  }
+  // far skyline
+  const fo = t * 160;
+  ctx.fillStyle = "#FFD2B5";
+  for (const [x, w, h] of FAR) for (let rep = -1; rep <= 1; rep++) {
+    const X = ((x - fo) % FAR_W + FAR_W) % FAR_W + rep * FAR_W;
+    if (X < W && X + w > 0) ctx.fillRect(X, GROUND - h, w, h);
+  }
+  // near skyline
+  const no = t * 420;
+  for (const [x, w, h, ci] of NEAR) {
+    for (let rep = -1; rep <= 1; rep++) {
+      const X = ((x - no) % NEAR_W + NEAR_W) % NEAR_W + rep * NEAR_W;
+      if (X > W || X + w < 0) continue;
+      ctx.fillStyle = NEAR_C[ci]; ctx.fillRect(X, GROUND - h, w, h);
+      ctx.fillStyle = "rgba(255,240,228,0.75)";
+      for (let wy = GROUND - h + 30; wy < GROUND - 60; wy += 60) for (let wx = X + 22; wx < X + w - 40; wx += 48) ctx.fillRect(wx, wy, 24, 30);
+    }
+  }
+  // road
+  ctx.fillStyle = "#E8DCCF"; ctx.fillRect(0, GROUND, W, 34);
+  ctx.fillStyle = "#4A4E69"; ctx.fillRect(0, GROUND + 34, W, H);
+  const ro = (t * 1100) % 200;
+  ctx.fillStyle = "#FFFFFF";
+  for (let x = -ro; x < W; x += 200) rr(x, 965, 110, 14, 7, "#FFFFFF");
+  // rider
+  const enter = eOut(P(t, 0, 1.1)), exit = eIn(P(t, 3.7, 0.8));
+  const rx = lerp(-400, 900, enter) + exit * 1500 + Math.sin(t * 1.3) * 20;
+  const ry = 905 + Math.sin(t * 16) * 3;
+  // speed lines
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  for (let i = 0; i < 4; i++) {
+    const L = 120 + (i % 2) * 80, off = ((t * 900 + i * 130) % 260);
+    rr(rx - 300 - L - off, ry - 220 + i * 52, L, 10, 5, "#FFFFFF");
+  }
+  ctx.save(); ctx.translate(rx, ry); rider(t); ctx.restore();
+  // ETA card at the top
+  const ck = eOut(P(t, 0.3, 0.6));
+  if (ck > 0) {
+    ctx.save(); ctx.globalAlpha = ck; ctx.translate(0, (1 - ck) * -80);
+    rr(500 + 12, 52 + 14, 920, 200, 40, "rgba(45,42,62,0.10)");
+    rr(500, 52, 920, 200, 40, "#FFFFFF");
+    const mins = Math.max(3, Math.round(15 - 12 * P(t, 0.6, 3.6)));
+    text("طلبك في الطريق", 1370, 112, 46, INK, "right");
+    text(`يوصلك خلال ${mins} دقيقة`, 1370, 168, 28, GREY, "right", 700);
+    rr(560, 92, 170, 70, 35, OR_L); text(`${mins} د`, 645, 128, 36, OR);
+    // route bar
+    const pk = P(t, 0.6, 3.6);
+    rr(600, 212, 720, 12, 6, "#F1ECE8"); rr(600, 212, 720 * pk, 12, 6, OR);
+    circle(600, 218, 16, OR); circle(1320, 218, 16, pk >= 1 ? GREEN : "#D7D3E0");
+    circle(600 + 720 * pk, 218, 13, "#FFFFFF"); ctx.beginPath(); ctx.arc(600 + 720 * pk, 218, 13, 0, 7); ctx.strokeStyle = OR; ctx.lineWidth = 6; ctx.stroke();
+    ctx.restore();
+  }
+  rise(t, 0.6, "ويوصلك بسرعة لين باب بيتك", 960, 360, 72, INK);
+}
+
+// ================= SCENE 5: delivered =================
+const CONF = []; { const r = rng(7); for (let i = 0; i < 70; i++) CONF.push({ a: -Math.PI / 2 + (r() - .5) * 2.6, v: 700 + r() * 900, s: 12 + r() * 14, c: [OR, "#FFD23F", "#3FA9F5", GREEN, "#E8402E"][i % 5], rot: r() * 6, sp: (r() - .5) * 12, shape: i % 3 }); }
+
+function bag() {
+  ctx.beginPath(); ctx.arc(0, -160, 78, Math.PI, 0); ctx.strokeStyle = OR_D; ctx.lineWidth = 20; ctx.stroke();
+  rr(-170 + 16, -160 + 18, 340, 340, 28, "rgba(45,42,62,0.12)");
+  rr(-170, -160, 340, 340, 28, OR);
+  rr(-170, -160, 340, 54, [28, 28, 0, 0], OR_D);
+  text("طلبات", 0, -10, 76, "#FFFFFF");
+  ctx.beginPath(); ctx.arc(0, 30, 70, 0.18 * Math.PI, 0.82 * Math.PI); ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 16; ctx.lineCap = "round"; ctx.stroke();
+}
+
+function s5(t) {
+  bg(CREAM);
+  // sunburst
+  ctx.save(); ctx.translate(960, 540); ctx.rotate(t * 0.25);
+  const sk = eOut(P(t, 0, 0.6));
+  for (let i = 0; i < 16; i++) {
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 1400 * sk, i * Math.PI / 8, i * Math.PI / 8 + Math.PI / 16); ctx.closePath();
+    ctx.fillStyle = "#FFE7D6"; ctx.fill();
+  }
+  ctx.restore();
+  // bag drop with bounce
+  const dk = P(t, 0, 0.6);
+  const drop = dk < 1 ? eIn(dk) : 1;
+  const sq = Math.sin(P(t, 0.6, 0.35) * Math.PI) * 0.12;
+  const by = lerp(-400, 560, drop);
+  // food flying out (behind bag)
+  [[burger, -330, -330, -0.2], [fries, 0, -420, 0.05], [drink, 330, -330, 0.2]].forEach(([fn, dx, dy, rot], i) => {
+    const k = eOut(P(t, 0.65 + i * 0.08, 0.55)); if (k <= 0) return;
+    const fy = Math.sin(t * 3 + i) * 10 * k;
+    ctx.save(); ctx.translate(960 + dx * k, 500 + dy * k + fy); ctx.scale(0.4 + k, 0.4 + k);
+    circle(0, 0, 95, "#FFFFFF"); icon(fn, 0, 0, 1.2, rot * k);
+    ctx.restore();
+  });
+  ctx.save(); ctx.translate(960, by + 180); ctx.scale(1 + sq, 1 - sq); ctx.translate(0, -180); bag(); ctx.restore();
+  // confetti
+  const ct = t - 0.6;
+  if (ct > 0) for (const c of CONF) {
+    const x = 960 + Math.cos(c.a) * c.v * ct, y = 480 + Math.sin(c.a) * c.v * ct + 900 * ct * ct;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(c.rot + c.sp * ct); ctx.globalAlpha = clamp(2.2 - ct);
+    if (c.shape === 0) rr(-c.s / 2, -c.s / 4, c.s, c.s / 2, 3, c.c);
+    else if (c.shape === 1) circle(0, 0, c.s / 2.5, c.c);
+    else { ctx.beginPath(); ctx.moveTo(0, -c.s / 2); ctx.lineTo(c.s / 2, c.s / 2); ctx.lineTo(-c.s / 2, c.s / 2); ctx.closePath(); ctx.fillStyle = c.c; ctx.fill(); }
+    ctx.restore();
+  }
+  pop(t, 0.95, 960, 930, () => {
+    const s = "وصل طلبك… بالعافية!", tw = textW(s, 76) + 120;
+    rr(-tw / 2 + 10, -64 + 12, tw, 128, 64, OR_D);
+    rr(-tw / 2, -64, tw, 128, 64, OR);
+    text(s, 0, 4, 76, "#FFFFFF");
+  }, 0.5);
+}
+
+// ================= SCENE 6: end card =================
+function s6(t) {
+  bg(OR);
+  for (let i = 0; i < 4; i++) {
+    const k = ((t * 0.6 + i * 0.25) % 1);
+    ctx.beginPath(); ctx.arc(960, 520, 200 + k * 900, 0, 7);
+    ctx.strokeStyle = `rgba(255,255,255,${0.16 * (1 - k)})`; ctx.lineWidth = 26; ctx.stroke();
+  }
+  pop(t, 0.1, 960, 470, () => {
+    text("طلبات", 12, 14, 250, OR_D);
+    text("طلبات", 0, 0, 250, "#FFFFFF");
+    const sk = eOut(P(t, 0.4, 0.4));
+    ctx.beginPath(); ctx.arc(0, 0, 150, (0.5 - 0.32 * sk) * Math.PI, (0.5 + 0.32 * sk) * Math.PI);
+    ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 22; ctx.lineCap = "round"; if (sk > 0) ctx.stroke();
+  }, 0.6);
+  rise(t, 0.45, "talabat", 960, 735, 80, OR_L);
+  pop(t, 0.8, 960, 880, () => {
+    const s = "حمّل التطبيق واطلب الحين", tw = textW(s, 50) + 110;
+    rr(-tw / 2, -50, tw, 100, 50, "#FFFFFF");
+    text(s, 0, 4, 50, OR);
+  }, 0.5);
+}
+
+// ---------- timeline ----------
+const SCENES = [s1, s2, s3, s4, s5, s6];
+const ORIGIN = [null, [960, 540], [640, 540], [1320, 540], [960, 900], [960, 560]];
+const EDGE = [null, OR, "#FFFFFF", OR, OR, "#FFFFFF"];
+
+function draw(t) {
+  let i = 0; while (i < SCENES.length - 1 && t >= S[i + 1]) i++;
+  const lt = t - S[i];
+  if (i > 0 && lt < TR) {
+    SCENES[i - 1](t - S[i - 1]);
+    const k = eIO(lt / TR), r = k * 2300, [ox, oy] = ORIGIN[i];
+    ctx.save(); ctx.beginPath(); ctx.arc(ox, oy, r, 0, Math.PI * 2); ctx.clip(); SCENES[i](lt); ctx.restore();
+    ctx.beginPath(); ctx.arc(ox, oy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = EDGE[i]; ctx.lineWidth = 40 * (1 - k) + 6; ctx.stroke();
+  } else SCENES[i](lt);
+}
+
+window.DURATION = DURATION;
+window.render = async t => draw(t);
+window.ready = Promise.all([
+  document.fonts.load('900 100px "Cairo"', "طلبات"), document.fonts.load('700 100px "Cairo"', "طلبات"),
+  document.fonts.load('900 100px "Cairo"', "talabat 5.250"), document.fonts.load('700 100px "Cairo"', "4.8 •"),
+]).then(() => draw(0));
+
+// live preview when opened in a browser
+if (!navigator.webdriver) { const t0 = performance.now(); (function loop() { draw(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(loop); })(); }
+</script>
+</body>
+</html>
