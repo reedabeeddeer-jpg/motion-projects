@@ -52,7 +52,10 @@
     "desert:vo": "python3 scripts/gemini_tts.py --script desert-thirst/vo-script.txt --out output/desert-thirst-vo.wav --voice Fenrir --style \"رجل تايه في الصحراء، عطشان ومنهك، صوته مبحوح ويصرخ بيأس، لهجة خليجية\"",
     "desert:mix": "sh -c 'if [ -f output/desert-thirst-vo.wav ]; then ffmpeg -y -loglevel error -i output/desert-thirst-ambience.wav -i output/desert-thirst-vo.wav -filter_complex \"[0]volume=0.6[a];[1]volume=1.6[b];[a][b]amix=inputs=2:duration=first:normalize=0\" output/desert-thirst-mix.wav; else cp output/desert-thirst-ambience.wav output/desert-thirst-mix.wav; fi'",
     "desert:preview": "node scripts/render.mjs --src src/desert-thirst.html --preview --times 0.5,1.5,2.8,4.6",
-    "desert:render": "node scripts/render.mjs --src src/desert-thirst.html --audio output/desert-thirst-mix.wav --out output/desert-thirst-1080p.mp4 && ffmpeg -y -loglevel error -i output/desert-thirst-1080p.mp4 -vf scale=1280:720:flags=lanczos -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a copy -movflags +faststart output/desert-thirst-720p.mp4"
+    "desert:render": "node scripts/render.mjs --src src/desert-thirst.html --audio output/desert-thirst-mix.wav --out output/desert-thirst-1080p.mp4 && ffmpeg -y -loglevel error -i output/desert-thirst-1080p.mp4 -vf scale=1280:720:flags=lanczos -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a copy -movflags +faststart output/desert-thirst-720p.mp4",
+    "talabat:audio": "python3 scripts/talabat_soundtrack.py",
+    "talabat:preview": "node scripts/render.mjs --src src/talabat.html --preview --times 1.2,2.8,5,6.9,8.6,10.5,13.5,17,19.2",
+    "talabat:render": "node scripts/render.mjs --src src/talabat.html --audio output/talabat-soundtrack.wav --out output/talabat.mp4"
   },
   "devDependencies": {
     "playwright": "1.56.1"
